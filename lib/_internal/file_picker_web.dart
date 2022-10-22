@@ -9,7 +9,7 @@ class FilePickerWeb extends FilePicker {
   late Element _target;
   final String _kFilePickerInputsDomId = '__file_picker_web-file-input';
 
-  final int _readStreamChunkSize = 1000 * 1000 * 5; // 1 MB
+  final int _readStreamChunkSize = 1024 * 1024 * 5; // 1 MB
 
   static final FilePickerWeb platform = FilePickerWeb._();
 
