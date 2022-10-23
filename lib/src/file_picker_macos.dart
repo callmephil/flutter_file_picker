@@ -1,3 +1,4 @@
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_picker/src/utils.dart';
 
@@ -13,6 +14,7 @@ class FilePickerMacOS extends FilePicker {
     bool allowMultiple = false,
     bool withData = false,
     bool withReadStream = false,
+    StreamOptions? streamOptions,
     bool lockParentWindow = false,
   }) async {
     final String executable = await isExecutableOnPath('osascript');
@@ -42,6 +44,7 @@ class FilePickerMacOS extends FilePicker {
     final List<PlatformFile> platformFiles = await filePathsToPlatformFiles(
       filePaths,
       withReadStream,
+      streamOptions,
       withData,
     );
 

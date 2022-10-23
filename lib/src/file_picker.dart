@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:file_picker/src/file_picker_io.dart';
 import 'package:file_picker/src/file_picker_macos.dart';
 import 'package:file_picker/src/file_picker_result.dart';
@@ -108,6 +109,7 @@ abstract class FilePicker extends PlatformInterface {
     bool allowMultiple = false,
     bool withData = false,
     bool withReadStream = false,
+    StreamOptions? streamOptions,
     bool lockParentWindow = false,
   }) async =>
       throw UnimplementedError('pickFiles() has not been implemented.');

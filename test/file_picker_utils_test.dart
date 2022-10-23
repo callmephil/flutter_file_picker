@@ -60,8 +60,12 @@ void main() {
         () async {
       final filePaths = [imageTestFile, pdfTestFile, yamlTestFile];
 
-      final platformFiles =
-          await filePathsToPlatformFiles(filePaths, false, false);
+      final platformFiles = await filePathsToPlatformFiles(
+        filePaths,
+        false,
+        null,
+        false,
+      );
 
       expect(platformFiles.length, equals(filePaths.length));
 
@@ -98,6 +102,7 @@ void main() {
       final platformFiles = await filePathsToPlatformFiles(
         filePaths,
         false,
+        null,
         false,
       );
 

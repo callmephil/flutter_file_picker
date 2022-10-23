@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:html';
 import 'dart:typed_data';
 
+import 'package:file_picker/_stream/stream_control.dart';
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 class FilePickerWeb extends FilePicker {
   late Element _target;
   final String _kFilePickerInputsDomId = '__file_picker_web-file-input';
-
-  final int _readStreamChunkSize = 1024 * 1024 * 5; // 1 MB
 
   static final FilePickerWeb platform = FilePickerWeb._();
 
@@ -46,10 +46,15 @@ class FilePickerWeb extends FilePicker {
     bool withData = true,
     bool withReadStream = false,
     bool lockParentWindow = false,
+    StreamOptions? streamOptions,
   }) async {
     if (type != FileType.custom && (allowedExtensions?.isNotEmpty ?? false)) {
       throw Exception(
           'You are setting a type [$type]. Custom extension filters are only allowed with FileType.custom, please change it or remove filters.');
+    }
+
+    if (withReadStream && streamOptions == null) {
+      streamOptions = StreamOptions();
     }
 
     final Completer<List<PlatformFile>?> filesCompleter =
@@ -101,7 +106,14 @@ class FilePickerWeb extends FilePicker {
 
       for (File file in files) {
         if (withReadStream) {
-          addPickedFile(file, null, null, _openFileReadStream(file));
+          addPickedFile(
+            file,
+            null,
+            null,
+            file.openReadStream(
+              streamOptions!.chunkSize,
+            ),
+          );
           continue;
         }
 
@@ -172,22 +184,6 @@ class FilePickerWeb extends FilePicker {
       case FileType.custom:
         return allowedExtensions!
             .fold('', (prev, next) => '${prev.isEmpty ? '' : '$prev,'} .$next');
-    }
-  }
-
-  Stream<List<int>> _openFileReadStream(File file) async* {
-    final reader = FileReader();
-
-    int start = 0;
-    while (start < file.size) {
-      final end = start + _readStreamChunkSize > file.size
-          ? file.size
-          : start + _readStreamChunkSize;
-      final blob = file.slice(start, end);
-      reader.readAsArrayBuffer(blob);
-      await reader.onLoad.first;
-      yield reader.result as List<int>;
-      start += _readStreamChunkSize;
     }
   }
 }

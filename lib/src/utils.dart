@@ -1,12 +1,15 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:file_picker/_stream/stream_control.dart';
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart';
 
 Future<List<PlatformFile>> filePathsToPlatformFiles(
   List<String> filePaths,
   bool withReadStream,
+  StreamOptions? streamOptions,
   bool withData,
 ) {
   return Future.wait(
@@ -16,7 +19,15 @@ Future<List<PlatformFile>> filePathsToPlatformFiles(
       final file = File(filePath);
 
       if (withReadStream) {
-        return createPlatformFile(file, null, file.openRead());
+        streamOptions ??= StreamOptions();
+
+        return createPlatformFile(
+          file,
+          null,
+          file.openReadStream(
+            streamOptions!.chunkSize,
+          ),
+        );
       }
 
       if (!withData) {

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/_stream/stream_control.dart';
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +33,7 @@ class FilePickerIO extends FilePicker {
     bool allowMultiple = false,
     bool? withData = false,
     bool? withReadStream = false,
+    StreamOptions? streamOptions,
     bool lockParentWindow = false,
   }) =>
       _getPath(
@@ -41,6 +44,7 @@ class FilePickerIO extends FilePicker {
         onFileLoading,
         withData,
         withReadStream,
+        streamOptions,
       );
 
   @override
@@ -72,12 +76,18 @@ class FilePickerIO extends FilePicker {
     Function(FilePickerStatus)? onFileLoading,
     bool? withData,
     bool? withReadStream,
+    StreamOptions? streamOptions,
   ) async {
     final String type = describeEnum(fileType);
     if (type != 'custom' && (allowedExtensions?.isNotEmpty ?? false)) {
       throw Exception(
           'You are setting a type [$fileType]. Custom extension filters are only allowed with FileType.custom, please change it or remove filters.');
     }
+
+    if (withReadStream == true && streamOptions == null) {
+      streamOptions = StreamOptions();
+    }
+
     try {
       _eventSubscription?.cancel();
       if (onFileLoading != null) {
@@ -107,7 +117,9 @@ class FilePickerIO extends FilePicker {
           PlatformFile.fromMap(
             platformFileMap,
             readStream: withReadStream!
-                ? File(platformFileMap['path']).openRead()
+                ? File(platformFileMap['path']).openReadStream(
+                    streamOptions!.chunkSize,
+                  )
                 : null,
           ),
         );

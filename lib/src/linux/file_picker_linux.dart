@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:file_picker/src/file_picker.dart';
 import 'package:file_picker/src/file_picker_result.dart';
 import 'package:file_picker/src/linux/dialog_handler.dart';
@@ -17,6 +18,7 @@ class FilePickerLinux extends FilePicker {
     bool allowMultiple = false,
     bool withData = false,
     bool withReadStream = false,
+    StreamOptions? streamOptions,
     bool lockParentWindow = false,
   }) async {
     final String executable = await _getPathToExecutable();
@@ -49,6 +51,7 @@ class FilePickerLinux extends FilePicker {
     final List<PlatformFile> platformFiles = await filePathsToPlatformFiles(
       filePaths,
       withReadStream,
+      streamOptions,
       withData,
     );
 
