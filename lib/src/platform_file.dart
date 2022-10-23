@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:file_picker/_stream/stream_options.dart';
 import 'package:flutter/foundation.dart';
 
 class PlatformFile {
@@ -11,9 +11,14 @@ class PlatformFile {
     this.bytes,
     this.readStream,
     this.identifier,
+    this.streamOptions,
   }) : _path = path;
 
-  factory PlatformFile.fromMap(Map data, {Stream<List<int>>? readStream}) {
+  factory PlatformFile.fromMap(
+    Map data, {
+    Stream<List<int>>? readStream,
+    StreamOptions? streamOptions,
+  }) {
     return PlatformFile(
       name: data['name'],
       path: data['path'],
@@ -21,6 +26,7 @@ class PlatformFile {
       size: data['size'],
       identifier: data['identifier'],
       readStream: readStream,
+      streamOptions: streamOptions,
     );
   }
 
@@ -56,6 +62,9 @@ class PlatformFile {
   /// File content as stream
   final Stream<List<int>>? readStream;
 
+  /// Options for stream
+  final StreamOptions? streamOptions;
+
   /// The file size in bytes. Defaults to `0` if the file size could not be
   /// determined.
   final int size;
@@ -83,6 +92,7 @@ class PlatformFile {
         other.bytes == bytes &&
         other.readStream == readStream &&
         other.identifier == identifier &&
+        other.streamOptions == streamOptions &&
         other.size == size;
   }
 
@@ -95,11 +105,20 @@ class PlatformFile {
             bytes.hashCode ^
             readStream.hashCode ^
             identifier.hashCode ^
+            streamOptions.hashCode ^
             size.hashCode;
   }
 
   @override
   String toString() {
-    return 'PlatformFile(${kIsWeb ? '' : 'path $path'}, name: $name, bytes: $bytes, readStream: $readStream, size: $size)';
+    return '''
+      PlatformFile:
+      ${kIsWeb ? '' : 'path $path'}
+      name: $name
+      bytes: $bytes
+      eadStream: $readStream
+      ${streamOptions?.toString()}
+      size: $size
+    ''';
   }
 }

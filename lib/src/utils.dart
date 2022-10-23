@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_picker/_stream/stream_control.dart';
-import 'package:file_picker/_stream/stream_options.dart';
+import 'package:file_picker/_stream/stream_extension.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart';
 
@@ -50,6 +49,7 @@ Future<PlatformFile> createPlatformFile(
       name: basename(file.path),
       path: file.path,
       readStream: readStream,
+      streamOptions: StreamOptions(),
       size: file.existsSync() ? file.lengthSync() : 0,
     );
 

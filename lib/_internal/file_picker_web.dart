@@ -53,6 +53,12 @@ class FilePickerWeb extends FilePicker {
           'You are setting a type [$type]. Custom extension filters are only allowed with FileType.custom, please change it or remove filters.');
     }
 
+    if (!withReadStream && streamOptions != null) {
+      throw Exception(
+        'You are setting streamOptions. But withReadStream is turned off, please change it or remove filters.',
+      );
+    }
+
     if (withReadStream && streamOptions == null) {
       streamOptions = StreamOptions();
     }
@@ -94,6 +100,7 @@ class FilePickerWeb extends FilePicker {
           size: bytes != null ? bytes.length : file.size,
           bytes: bytes,
           readStream: readStream,
+          streamOptions: streamOptions,
         ));
 
         if (pickedFiles.length >= files.length) {
@@ -110,9 +117,7 @@ class FilePickerWeb extends FilePicker {
             file,
             null,
             null,
-            file.openReadStream(
-              streamOptions!.chunkSize,
-            ),
+            _openReadStream(file, streamOptions!),
           );
           continue;
         }
@@ -184,6 +189,35 @@ class FilePickerWeb extends FilePicker {
       case FileType.custom:
         return allowedExtensions!
             .fold('', (prev, next) => '${prev.isEmpty ? '' : '$prev,'} .$next');
+    }
+  }
+
+  // ? Duplicate code.
+  // ? Could be moved this to the stream extension file.
+  Stream<List<int>> _openReadStream(
+      File file, StreamOptions streamOptions) async* {
+    final reader = FileReader();
+    final size = file.size;
+    final chunkSize = streamOptions.chunkSize;
+
+    // if the chunk size is bigger than the file size, we just read the whole file
+    if (chunkSize >= size) {
+      reader.readAsArrayBuffer(file);
+      await reader.onLoadEnd.first;
+      yield reader.result as List<int>;
+      return;
+    }
+
+    // if the chunk size is smaller than the file size, we read the file in chunks.
+    // the last chunk is the reminder of the sum of all yielded chunks - [size].
+    int start = 0;
+    while (start < size) {
+      final end = start + chunkSize > size ? size : start + chunkSize;
+      final blob = file.slice(start, end);
+      reader.readAsArrayBuffer(blob);
+      await reader.onLoad.first;
+      yield reader.result as List<int>;
+      start += chunkSize;
     }
   }
 }

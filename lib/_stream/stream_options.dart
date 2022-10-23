@@ -13,4 +13,12 @@ class StreamOptions {
   StreamOptions({
     this.chunkSize = 1 * _byte * _byte, // 1 MB
   });
+
+  @override
+  String toString() {
+    return '''
+      StreamOptions:
+        - chunkSize: $chunkSize
+    ''';
+  }
 }

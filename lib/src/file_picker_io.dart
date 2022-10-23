@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_picker/_stream/stream_control.dart';
-import 'package:file_picker/_stream/stream_options.dart';
+import 'package:file_picker/_stream/stream_extension.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -121,6 +120,7 @@ class FilePickerIO extends FilePicker {
                     streamOptions!.chunkSize,
                   )
                 : null,
+            streamOptions: streamOptions,
           ),
         );
       }
