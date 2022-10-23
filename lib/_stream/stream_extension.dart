@@ -7,9 +7,7 @@ import 'package:file_picker/_stream/stream_options.dart';
 Future<List<int>> _streamTransformer(Stream<List<int>> source) async {
   final list = <int>[];
   await for (final chunk in source) {
-    for (final byte in chunk) {
-      list.add(byte);
-    }
+    list.addAll(chunk);
   }
   return list;
 }
@@ -31,9 +29,7 @@ extension FileStreamIO on File {
     while (start < size) {
       final end = start + chunkSize > size ? size : start + chunkSize;
       // We need to convert the Stream<List<int>> to a List<int> to be able to yield it.
-      final chunk = await _streamTransformer(openRead(start, end));
-
-      yield chunk;
+      yield await _streamTransformer(openRead(start, end));
       start += chunkSize;
     }
   }
