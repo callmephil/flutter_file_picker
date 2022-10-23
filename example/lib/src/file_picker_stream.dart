@@ -28,7 +28,7 @@ class _FilePickerStreamState extends State<FilePickerStream> {
           _print(status);
         },
         streamOptions: StreamOptions(
-          chunkSize: 5.mb,
+          chunkSize: 10.mb,
         ),
       );
 
@@ -72,7 +72,7 @@ class _FilePickerStreamState extends State<FilePickerStream> {
       }
 
       final streamControl = StreamControl(
-        stream: stream,
+        stream,
         fileSize: file.size,
         chunkSize: file.streamOptions!.chunkSize,
       );
@@ -86,7 +86,7 @@ class _FilePickerStreamState extends State<FilePickerStream> {
           await Future.delayed(Duration(milliseconds: 250), () async {
             _print(
               '''onProgress: 
-            -> data: ${data.first} | ${data.last}, 
+            -> data: start - ${data.first} | end - ${data.last}, 
             -> length: ${data.length}, 
             -> progress: $progress, 
             -> chunkNumber: $chunkNumber, 
