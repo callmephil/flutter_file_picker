@@ -1,6 +1,5 @@
 import 'dart:async';
-// ignore: unnecessary_import
-import 'dart:typed_data';
+import 'dart:typed_data' as type_data show Uint8List;
 
 import 'package:file_picker/_stream/stream_options.dart';
 import 'package:flutter/foundation.dart';
@@ -59,7 +58,7 @@ class PlatformFile {
   /// Byte data for this file. Particularly useful if you want to manipulate its data
   /// or easily upload to somewhere else.
   /// [Check here in the FAQ](https://github.com/miguelpruivo/flutter_file_picker/wiki/FAQ) an example on how to use it to upload on web.
-  final Uint8List? bytes;
+  final type_data.Uint8List? bytes;
 
   /// File content as stream
   final Stream<List<int>>? readStream;
