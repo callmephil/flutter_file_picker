@@ -1,6 +1,8 @@
 // Helpers
 import 'dart:async';
 
+import 'package:file_picker/_stream/stream_options.dart';
+
 // utils: Debugging only
 void _print(Object? object) {
   print(object);
@@ -58,10 +60,10 @@ class StreamControl {
   final Stream<List<int>> stream;
 
   ///
-  final int fileSize;
+  final Bytes fileSize;
 
   ///
-  final int chunkSize;
+  final Bytes chunkSize;
 
   final StreamSubscription<List<int>> _subscription;
   StreamControl(
