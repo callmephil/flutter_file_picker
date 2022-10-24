@@ -1,4 +1,6 @@
 import 'dart:async';
+// ignore: unnecessary_import
+import 'dart:typed_data';
 
 import 'package:file_picker/_stream/stream_options.dart';
 import 'package:flutter/foundation.dart';
