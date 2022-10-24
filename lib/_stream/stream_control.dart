@@ -87,6 +87,8 @@ class StreamControl {
   double get _progress => (_totalBytesSent / fileSize).toPercent();
 
   int _currentChunk = 0;
+  int _startByte = 0;
+  int _endByte = 0;
   int _totalBytesSent = 0;
 
   void readStream(
@@ -95,6 +97,8 @@ class StreamControl {
   }) {
     _subscription.onData((data) async {
       _currentChunk++;
+
+      _endByte = _startByte + data.length - 1;
       _totalBytesSent += data.length;
       if (_currentChunk < startChunk) {
         _print('skipped chunk $_currentChunk');
@@ -105,7 +109,8 @@ class StreamControl {
 
       _pause();
       if (controls.onProgress != null) {
-        controls.onProgress!(data, _progress, _currentChunk, _totalBytesSent);
+        controls.onProgress!(data, _progress, _startByte, _endByte);
+        _startByte += data.length;
       }
     });
 
