@@ -39,9 +39,9 @@ class _FilePickerStreamState extends State<FilePickerStream> {
       final file = result.files.first;
       _readStream(file);
     } on PlatformException catch (e) {
-      _print("Unsupported operation: $e");
+      _print('Unsupported operation: $e');
     } catch (e) {
-      _print("Unknown error: $e");
+      _print('Unknown error: $e');
     }
   }
 
@@ -53,14 +53,14 @@ class _FilePickerStreamState extends State<FilePickerStream> {
       }
 
       if (result) {
-        _print("Temporary files cleared");
+        _print('Temporary files cleared');
       } else {
-        _print("Temporary files not cleared");
+        _print('Temporary files not cleared');
       }
     } on PlatformException catch (e) {
-      _print("Unsupported operation$e");
+      _print('Unsupported operation$e');
     } catch (e) {
-      _print("Unknown error$e");
+      _print('Unknown error$e');
     }
   }
 
@@ -77,13 +77,13 @@ class _FilePickerStreamState extends State<FilePickerStream> {
         chunkSize: file.streamOptions!.chunkSize,
       );
 
-      final int startChunk = 0;
+      const int startChunk = 0;
       final controls = Controls(
         onSuccess: () {
           _print('onSuccess');
         },
         onProgress: (data, progress, chunkNumber, accumulated) async {
-          await Future.delayed(Duration(milliseconds: 250), () async {
+          await Future.delayed(const Duration(milliseconds: 250), () async {
             _print(
               '''onProgress: 
             -> data: start - ${data.first} | end - ${data.last}, 
@@ -111,9 +111,9 @@ class _FilePickerStreamState extends State<FilePickerStream> {
         startChunk: startChunk,
       );
     } on PlatformException catch (e) {
-      _print("Unsupported operation$e");
+      _print('Unsupported operation$e');
     } catch (e) {
-      _print("Unknown error$e");
+      _print('Unknown error$e');
     }
   }
 
