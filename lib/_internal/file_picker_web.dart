@@ -178,7 +178,7 @@ class FilePickerWeb extends FilePicker {
     }
   }
 
-  Stream<List<int>> _openFileReadStream(File file) async* {
+  Stream<Uint8List> _openFileReadStream(File file) async* {
     final reader = FileReader();
 
     int start = 0;
@@ -189,7 +189,7 @@ class FilePickerWeb extends FilePicker {
       final blob = file.slice(start, end);
       reader.readAsArrayBuffer(blob);
       await reader.onLoad.first;
-      yield reader.result as List<int>;
+      yield reader.result as Uint8List;
       start += _readStreamChunkSize;
     }
   }

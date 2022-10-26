@@ -130,7 +130,7 @@ class FilePickerIO extends FilePicker {
     }
   }
 
-  Stream<List<int>> _openFileReadStream(File file, int chunkSize) async* {
+  Stream<Uint8List> _openFileReadStream(File file, int chunkSize) async* {
     int length = await file.length();
     // int chunkCount = (length / chunkSize).ceil();
     // implement randomAccess
@@ -147,7 +147,7 @@ class FilePickerIO extends FilePicker {
       int start = 0;
       while (start < length) {
         int end;
-        if (start + chunkSize > length) {
+        if (start + chunkSize >= length) {
           end = length - start;
         } else {
           end = start + chunkSize;

@@ -13,7 +13,7 @@ class PlatformFile {
     this.identifier,
   }) : _path = path;
 
-  factory PlatformFile.fromMap(Map data, {Stream<List<int>>? readStream}) {
+  factory PlatformFile.fromMap(Map data, {Stream<Uint8List>? readStream}) {
     return PlatformFile(
       name: data['name'],
       path: data['path'],
