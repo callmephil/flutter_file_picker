@@ -7,9 +7,8 @@ import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 class FilePickerWeb extends FilePicker {
   late Element _target;
+  late int _readStreamChunkSize;
   final String _kFilePickerInputsDomId = '__file_picker_web-file-input';
-
-  final int _readStreamChunkSize = 1000 * 1000; // 1 MB
 
   static final FilePickerWeb platform = FilePickerWeb._();
 
@@ -46,11 +45,15 @@ class FilePickerWeb extends FilePicker {
     bool withData = true,
     bool withReadStream = false,
     bool lockParentWindow = false,
+    int readStreamChunkSize = 1000 * 1000,
   }) async {
     if (type != FileType.custom && (allowedExtensions?.isNotEmpty ?? false)) {
       throw Exception(
           'You are setting a type [$type]. Custom extension filters are only allowed with FileType.custom, please change it or remove filters.');
     }
+
+    // Expose the chunk size to the read stream.
+    _readStreamChunkSize = readStreamChunkSize;
 
     final Completer<List<PlatformFile>?> filesCompleter =
         Completer<List<PlatformFile>?>();

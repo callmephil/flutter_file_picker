@@ -32,6 +32,7 @@ class FilePickerIO extends FilePicker {
     bool? withData = false,
     bool? withReadStream = false,
     bool lockParentWindow = false,
+    int readStreamChunkSize = 1000 * 1000,
   }) =>
       _getPath(
         type,
@@ -41,6 +42,7 @@ class FilePickerIO extends FilePicker {
         onFileLoading,
         withData,
         withReadStream,
+        readStreamChunkSize,
       );
 
   @override
@@ -72,6 +74,7 @@ class FilePickerIO extends FilePicker {
     Function(FilePickerStatus)? onFileLoading,
     bool? withData,
     bool? withReadStream,
+    int readStreamChunkSize,
   ) async {
     final String type = describeEnum(fileType);
     if (type != 'custom' && (allowedExtensions?.isNotEmpty ?? false)) {
@@ -107,7 +110,10 @@ class FilePickerIO extends FilePicker {
           PlatformFile.fromMap(
             platformFileMap,
             readStream: withReadStream!
-                ? File(platformFileMap['path']).openRead()
+                ? _openFileReadStream(
+                    File(platformFileMap['path']),
+                    readStreamChunkSize,
+                  )
                 : null,
           ),
         );
@@ -121,6 +127,23 @@ class FilePickerIO extends FilePicker {
       print(
           '[$_tag] Unsupported operation. Method not found. The exception thrown was: $e');
       rethrow;
+    }
+  }
+
+  Stream<List<int>> _openFileReadStream(File file, int chunkSize) async* {
+    int length = await file.length();
+    int chuntCount = (length / chunkSize).ceil();
+
+    while (chuntCount > 0) {
+      int start = (chuntCount - 1) * chunkSize;
+      int end = start + chunkSize;
+
+      if (end > length) {
+        end = length;
+      }
+
+      yield await file.openRead(start, end).first;
+      chuntCount--;
     }
   }
 }
