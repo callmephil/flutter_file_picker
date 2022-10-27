@@ -29,37 +29,70 @@ enum EmitType {
   onPause,
   onResume,
   onCancel,
+  onError,
+  onDone,
 }
+
+typedef FutureCallback = Future<void> Function(int);
 
 class UploadController {
   final Stream<Uint8List> stream;
   Function(EmitType type)? onEmitter;
-  Future<Function(int)>? onTick;
+  FutureCallback onTick;
   UploadController(
     this.stream, {
     this.onEmitter,
+    required this.onTick,
   });
 
+  bool _isCanceled = false;
+  bool _isManualPause = false;
+
   StreamSubscription<Uint8List>? _subscription;
+  bool get isCanceled => _isCanceled;
+  bool get isPaused => _subscription?.isPaused ?? false || _isManualPause;
 
   void start() {
-    _subscription = stream.listen((event) {
+    _subscription = stream.listen((_) {
+      print('started');
+    }, cancelOnError: true);
+
+    _subscription?.onData((data) async {
       _subscription?.pause();
+      await onTick.call(data.length);
+      _subscription?.resume();
+    });
+
+    _subscription?.onDone(() {
+      onEmitter?.call(EmitType.onDone);
+    });
+
+    _subscription?.onError((e) {
+      print('Stream Error: $e');
+      onEmitter?.call(EmitType.onError);
     });
   }
 
   void pause() {
     _subscription?.pause();
+    _isManualPause = true;
     onEmitter?.call(EmitType.onPause);
   }
 
   void resume() {
+    if (_isManualPause) {
+      _subscription?.resume();
+    }
+    // When manually paused, we must resume it twice.
+    // It is safe to resume, even if it is not paused
     _subscription?.resume();
+
     onEmitter?.call(EmitType.onResume);
   }
 
   void cancel() {
     _subscription?.cancel();
+    _isCanceled = true;
     onEmitter?.call(EmitType.onCancel);
   }
 }
@@ -76,7 +109,6 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int fileSize = 0;
   StreamSubscription<Uint8List>? _subscription;
-  final MySingleton _singleton = MySingleton();
 
   void _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
