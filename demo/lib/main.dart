@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,6 +24,46 @@ class MyApp extends StatelessWidget {
   }
 }
 
+enum EmitType {
+  onStart,
+  onPause,
+  onResume,
+  onCancel,
+}
+
+class UploadController {
+  final Stream<Uint8List> stream;
+  Function(EmitType type)? onEmitter;
+  Future<Function(int)>? onTick;
+  UploadController(
+    this.stream, {
+    this.onEmitter,
+  });
+
+  StreamSubscription<Uint8List>? _subscription;
+
+  void start() {
+    _subscription = stream.listen((event) {
+      _subscription?.pause();
+    });
+  }
+
+  void pause() {
+    _subscription?.pause();
+    onEmitter?.call(EmitType.onPause);
+  }
+
+  void resume() {
+    _subscription?.resume();
+    onEmitter?.call(EmitType.onResume);
+  }
+
+  void cancel() {
+    _subscription?.cancel();
+    onEmitter?.call(EmitType.onCancel);
+  }
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
@@ -31,26 +75,39 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int fileSize = 0;
+  StreamSubscription<Uint8List>? _subscription;
+  final MySingleton _singleton = MySingleton();
+
   void _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       withReadStream: true,
-      readStreamChunkSize: 100 * 1024 * 1024,
+      readStreamChunkSize: 1 * 1024 * 1024,
       onFileLoading: (p0) => print(p0),
     );
     final file = result?.files.first;
-    if (file == null || file.readStream == null) {
+    if (file == null) {
       return;
     }
 
     setState(() {
+      counter = 0;
       fileSize = file.size;
     });
 
-    final subscription = file.readStream!.listen(null);
-    subscription.onData((data) {
-      subscription.pause(delayedPrint(data.length));
+    if (file.readStream == null) {
+      return;
+    }
+
+    _subscription = file.readStream!.listen(null, cancelOnError: true);
+    _subscription?.onData((data) async {
+      _subscription?.pause();
+      await delayedPrint(data.length);
+      _subscription?.resume();
     });
-    subscription.onDone(() {
+    _subscription?.onError((err) {
+      print(err);
+    });
+    _subscription?.onDone(() {
       print('done');
     });
   }
@@ -67,8 +124,8 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future delayedPrint(int object) {
-    return Future.delayed(const Duration(seconds: 1), () {
-      // print(object);
+    return Future.delayed(const Duration(milliseconds: 1000), () {
+      print(object);
       _updateCounter(object);
     });
   }
@@ -82,16 +139,24 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Row(
         children: [
           Text('Sent: $counter/$fileSize'),
-          if (counter < fileSize)
-            CircularProgressIndicator.adaptive(
-              value: (counter / fileSize) * 100,
-            ),
+          ElevatedButton(
+            onPressed: () {
+              _subscription?.cancel();
+              _subscription?.resume();
+            },
+            child: const Text('Cancel'),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _pickFile,
         tooltip: 'Pick File',
-        child: const Icon(Icons.add),
+        child: counter < fileSize
+            ? CircularProgressIndicator(
+                color: Colors.white,
+                value: (counter / fileSize),
+              )
+            : const Icon(Icons.add),
       ),
     );
   }
