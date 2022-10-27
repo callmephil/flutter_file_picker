@@ -54,7 +54,7 @@ class PlatformFile {
   final Uint8List? bytes;
 
   /// File content as stream
-  final Stream<List<int>>? readStream;
+  final Stream<Uint8List>? readStream;
 
   /// The file size in bytes. Defaults to `0` if the file size could not be
   /// determined.

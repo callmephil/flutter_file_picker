@@ -16,7 +16,8 @@ Future<List<PlatformFile>> filePathsToPlatformFiles(
       final file = File(filePath);
 
       if (withReadStream) {
-        return createPlatformFile(file, null, file.openRead());
+        // TODO:
+        // return createPlatformFile(file, null, file.openRead());
       }
 
       if (!withData) {
@@ -32,7 +33,7 @@ Future<List<PlatformFile>> filePathsToPlatformFiles(
 Future<PlatformFile> createPlatformFile(
   File file,
   Uint8List? bytes,
-  Stream<List<int>>? readStream,
+  Stream<Uint8List>? readStream,
 ) async =>
     PlatformFile(
       bytes: bytes,

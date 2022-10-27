@@ -143,19 +143,17 @@ class FilePickerIO extends FilePicker {
     // chunk 2: positionSync(1)  & yield readSync(5 * 1024 * 1024 - 10 * 1024 * 1024)
     // chunk 3: positionSync(2)  & yield readSync(10 * 1024 * 1024 - 13 * 1024 * 1024)
     //
-    try {
-      int start = 0;
-      while (length > 0) {
-        if (start > 0) {
-          randomAccessFile.setPositionSync(start);
-        }
-        int next = length > chunkSize ? chunkSize : length;
-        yield randomAccessFile.readSync(next);
-        start += next;
+    int start = 0;
+    while (length > 0) {
+      if (start > 0) {
+        await randomAccessFile.setPosition(start);
       }
-    } finally {
-      randomAccessFile.closeSync();
+      int next = length > chunkSize ? chunkSize : length;
+      length -= next;
+      yield randomAccessFile.readSync(next);
+      start += next;
     }
+    await randomAccessFile.close();
 
     // final RandomAccessFile randomAccessFile = await file.open();
     // try {

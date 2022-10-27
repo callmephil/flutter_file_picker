@@ -84,7 +84,7 @@ class FilePickerWeb extends FilePicker {
         File file,
         Uint8List? bytes,
         String? path,
-        Stream<List<int>>? readStream,
+        Stream<Uint8List>? readStream,
       ) {
         pickedFiles.add(PlatformFile(
           name: file.name,
