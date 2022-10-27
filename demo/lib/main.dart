@@ -20,12 +20,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-Future delayedPrint(Object? object) {
-  return Future.delayed(const Duration(seconds: 1), () {
-    print(object);
-  });
-}
-
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
@@ -36,6 +30,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  int fileSize = 0;
   void _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       withReadStream: true,
@@ -47,9 +42,12 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    setState(() {
+      fileSize = file.size;
+    });
+
     final subscription = file.readStream!.listen(null);
     subscription.onData((data) {
-      print('Listening');
       subscription.pause(delayedPrint(data.length));
     });
     subscription.onDone(() {
@@ -58,13 +56,20 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   int counter = 0;
-  void _updateCounter() {
+  void _updateCounter(int len) {
     if (!mounted) {
       return;
     }
 
     setState(() {
-      counter++;
+      counter += len;
+    });
+  }
+
+  Future delayedPrint(int object) {
+    return Future.delayed(const Duration(seconds: 1), () {
+      // print(object);
+      _updateCounter(object);
     });
   }
 
@@ -76,11 +81,11 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: Row(
         children: [
-          Text('Counted $counter times'),
-          ElevatedButton(
-            onPressed: _updateCounter,
-            child: const Text('Increment'),
-          ),
+          Text('Sent: $counter/$fileSize'),
+          if (counter < fileSize)
+            CircularProgressIndicator.adaptive(
+              value: (counter / fileSize) * 100,
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
