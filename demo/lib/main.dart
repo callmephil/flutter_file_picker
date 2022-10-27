@@ -1,9 +1,8 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
+import 'package:demo/stream_subscription_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,88 +23,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-enum StatusType {
-  onStart,
-  onPause,
-  onResume,
-  onCancel,
-  onError,
-  onDone,
-}
-
-typedef FutureCallback = Future<void> Function(int);
-
-class StreamSubscriptionController {
-  final Stream<Uint8List> stream;
-  Function(StatusType type)? onStatusChanged;
-  FutureCallback onProgress;
-  StreamSubscriptionController(
-    this.stream, {
-    this.onStatusChanged,
-    required this.onProgress,
-  });
-
-  bool _isCanceled = false;
-  bool _isManualPause = false;
-
-  StreamSubscription<Uint8List>? _subscription;
-  bool get isCanceled => _isCanceled;
-  bool get isPaused => _isManualPause;
-
-  void start() {
-    print('pre-process');
-    _subscription = stream.listen((_) {
-      print('started');
-    }, cancelOnError: true);
-
-    _subscription?.onData((data) async {
-      _subscription?.pause(onProgress.call(
-        data.length,
-      ));
-      // _subscription?.resume();
-    });
-
-    _subscription?.onDone(() {
-      onStatusChanged?.call(StatusType.onDone);
-    });
-
-    _subscription?.onError((e) {
-      print('Stream Error: $e');
-      onStatusChanged?.call(StatusType.onError);
-    });
-  }
-
-  void pause() {
-    _subscription?.pause();
-    _isManualPause = true;
-    onStatusChanged?.call(StatusType.onPause);
-  }
-
-  void resume() {
-    if (_isManualPause) {
-      _subscription?.resume();
-    }
-    // When manually paused, we must resume it twice.
-    // It is safe to resume, even if it is not paused
-    _subscription?.resume();
-
-    onStatusChanged?.call(StatusType.onResume);
-  }
-
-  void cancel() {
-    _subscription?.cancel();
-    _isCanceled = true;
-    onStatusChanged?.call(StatusType.onCancel);
-  }
-
-  void dispose() {
-    if (_subscription != null) {
-      _subscription?.cancel();
-      _subscription = null;
-    }
-  }
-}
-
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
@@ -116,68 +33,104 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int fileSize = 0;
   StreamSubscriptionController? _streamController;
 
   void _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       withReadStream: true,
-      readStreamChunkSize: 1 * 1024 * 1024,
+      readStreamChunkSize: kMaxBufferSize,
       onFileLoading: (p0) => print(p0),
     );
     final file = result?.files.first;
     if (file == null) {
+      print('file is null');
       return;
     }
-
-    setState(() {
-      counter = 0;
-      fileSize = file.size;
-    });
 
     if (file.readStream == null) {
+      print('file readStream is null');
       return;
     }
 
-    _streamController = StreamSubscriptionController(
-      file.readStream!,
-      onStatusChanged: (type) => print(type),
-      onProgress: (size) async {
-        print('ticking');
-        await delayedPrint(size);
-        print('after await');
+    await Future.delayed(Duration(seconds: 5));
+
+    final broadCastStream = file.readStream!.asBroadcastStream();
+
+    final subscription1 = broadCastStream.listen(
+      (event) {
+        print('Stream 1 ${event.length}');
       },
+      onDone: () => print('done subscription 1'),
     );
 
-    // _subscription = file.readStream!.listen(null, cancelOnError: true);
-    // _subscription?.onData((data) async {
-    //   _subscription?.pause();
-    //   await delayedPrint(data.length);
-    //   _subscription?.resume();
-    // });
-    // _subscription?.onError((err) {
-    //   print(err);
-    // });
-    // _subscription?.onDone(() {
-    //   print('done');
-    // });
+    final subscription2 = broadCastStream.listen(
+      (event) {
+        print('Stream 2 ${event.length}');
+      },
+      onDone: () => print('done subscription 2'),
+    );
+
+    final subscription3 = broadCastStream.listen(
+      (event) {
+        print('Stream 3 ${event.length}');
+      },
+      onDone: () => print('done subscription 3'),
+    );
+
+    final subscription4 = broadCastStream.listen(
+      (event) {
+        print('Stream 4 ${event.length}');
+      },
+      onDone: () => print('done subscription 4'),
+    );
+
+    final subscription5 = broadCastStream.listen(
+      (event) {
+        print('Stream 5 ${event.length}');
+      },
+      onDone: () => print('done subscription 5'),
+    );
+
+    // _streamController = StreamSubscriptionController(
+    //   file.readStream!,
+    //   size: file.size,
+    //   onStatusChanged: (type) {
+    //     print(type.name);
+    //     setState(() {});
+    //     switch (type) {
+    //       case StatusType.onStart:
+    //         break;
+    //       case StatusType.onPause:
+    //         // Should also cancel the onProgress callback
+    //         break;
+    //       case StatusType.onResume:
+    //         break;
+    //       case StatusType.onCancel:
+    //         setState(() {});
+    //         break;
+    //       case StatusType.onError:
+    //         break;
+    //       case StatusType.onDone:
+    //         break;
+    //     }
+    //   },
+    //   onStart: () async {
+    //     await delayedPrint('onStart');
+    //   },
+    //   onProgress: (data) async {
+    //     print('ticking');
+    //     await delayedPrint(data.length);
+    //     // setState(() {});
+    //   },
+    // );
+
+    // setState(() {});
   }
 
-  int counter = 0;
-  void _updateCounter(int len) {
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      counter += len;
-    });
-  }
-
-  Future delayedPrint(int object) {
-    return Future.delayed(const Duration(milliseconds: 5000), () {
-      print(object);
-      _updateCounter(object);
+  Future delayedPrint<T>(T object, [int delay = 500]) {
+    print('Processing delay: $delay');
+    return Future.delayed(Duration(milliseconds: delay), () {
+      print('Future Results: $object');
     });
   }
 
@@ -198,10 +151,16 @@ class _MyHomePageState extends State<MyHomePage> {
       floatingActionButton: FloatingActionButton(
         onPressed: _pickFile,
         tooltip: 'Pick File',
-        child: counter < fileSize
-            ? CircularProgressIndicator(
-                color: Colors.white,
-                value: (counter / fileSize),
+        child: _streamController != null
+            ? ValueListenableBuilder(
+                valueListenable: _streamController!.progress,
+                builder: (context, value, child) {
+                  print(value);
+                  return CircularProgressIndicator(
+                    color: Colors.white,
+                    value: value,
+                  );
+                },
               )
             : const Icon(Icons.add),
       ),
@@ -212,14 +171,13 @@ class _MyHomePageState extends State<MyHomePage> {
     if (_streamController == null) {
       return const SizedBox();
     }
-    int progress = ((counter / fileSize) * 100).toInt();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sent: $counter'),
-        Text('Expected: $fileSize'),
-        Text('Progress: $progress%')
+        Text('Sent: ${_streamController?.dataSent}'),
+        Text('Expected: ${_streamController?.size}'),
+        Text('Progress: ${_streamController?.progress.value}%')
       ],
     );
   }
