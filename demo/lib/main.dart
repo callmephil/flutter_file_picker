@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-enum EmitType {
+enum StatusType {
   onStart,
   onPause,
   onResume,
@@ -35,14 +35,14 @@ enum EmitType {
 
 typedef FutureCallback = Future<void> Function(int);
 
-class UploadController {
+class StreamSubscriptionController {
   final Stream<Uint8List> stream;
-  Function(EmitType type)? onEmitter;
-  FutureCallback onTick;
-  UploadController(
+  Function(StatusType type)? onStatusChanged;
+  FutureCallback onProgress;
+  StreamSubscriptionController(
     this.stream, {
-    this.onEmitter,
-    required this.onTick,
+    this.onStatusChanged,
+    required this.onProgress,
   });
 
   bool _isCanceled = false;
@@ -50,33 +50,35 @@ class UploadController {
 
   StreamSubscription<Uint8List>? _subscription;
   bool get isCanceled => _isCanceled;
-  bool get isPaused => _subscription?.isPaused ?? false || _isManualPause;
+  bool get isPaused => _isManualPause;
 
   void start() {
+    print('pre-process');
     _subscription = stream.listen((_) {
       print('started');
     }, cancelOnError: true);
 
     _subscription?.onData((data) async {
-      _subscription?.pause();
-      await onTick.call(data.length);
-      _subscription?.resume();
+      _subscription?.pause(onProgress.call(
+        data.length,
+      ));
+      // _subscription?.resume();
     });
 
     _subscription?.onDone(() {
-      onEmitter?.call(EmitType.onDone);
+      onStatusChanged?.call(StatusType.onDone);
     });
 
     _subscription?.onError((e) {
       print('Stream Error: $e');
-      onEmitter?.call(EmitType.onError);
+      onStatusChanged?.call(StatusType.onError);
     });
   }
 
   void pause() {
     _subscription?.pause();
     _isManualPause = true;
-    onEmitter?.call(EmitType.onPause);
+    onStatusChanged?.call(StatusType.onPause);
   }
 
   void resume() {
@@ -87,13 +89,20 @@ class UploadController {
     // It is safe to resume, even if it is not paused
     _subscription?.resume();
 
-    onEmitter?.call(EmitType.onResume);
+    onStatusChanged?.call(StatusType.onResume);
   }
 
   void cancel() {
     _subscription?.cancel();
     _isCanceled = true;
-    onEmitter?.call(EmitType.onCancel);
+    onStatusChanged?.call(StatusType.onCancel);
+  }
+
+  void dispose() {
+    if (_subscription != null) {
+      _subscription?.cancel();
+      _subscription = null;
+    }
   }
 }
 
@@ -108,7 +117,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int fileSize = 0;
-  StreamSubscription<Uint8List>? _subscription;
+  StreamSubscriptionController? _streamController;
 
   void _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -130,18 +139,28 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
-    _subscription = file.readStream!.listen(null, cancelOnError: true);
-    _subscription?.onData((data) async {
-      _subscription?.pause();
-      await delayedPrint(data.length);
-      _subscription?.resume();
-    });
-    _subscription?.onError((err) {
-      print(err);
-    });
-    _subscription?.onDone(() {
-      print('done');
-    });
+    _streamController = StreamSubscriptionController(
+      file.readStream!,
+      onStatusChanged: (type) => print(type),
+      onProgress: (size) async {
+        print('ticking');
+        await delayedPrint(size);
+        print('after await');
+      },
+    );
+
+    // _subscription = file.readStream!.listen(null, cancelOnError: true);
+    // _subscription?.onData((data) async {
+    //   _subscription?.pause();
+    //   await delayedPrint(data.length);
+    //   _subscription?.resume();
+    // });
+    // _subscription?.onError((err) {
+    //   print(err);
+    // });
+    // _subscription?.onDone(() {
+    //   print('done');
+    // });
   }
 
   int counter = 0;
@@ -156,7 +175,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future delayedPrint(int object) {
-    return Future.delayed(const Duration(milliseconds: 1000), () {
+    return Future.delayed(const Duration(milliseconds: 5000), () {
       print(object);
       _updateCounter(object);
     });
@@ -168,17 +187,13 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text(widget.title),
       ),
-      body: Row(
-        children: [
-          Text('Sent: $counter/$fileSize'),
-          ElevatedButton(
-            onPressed: () {
-              _subscription?.cancel();
-              _subscription?.resume();
-            },
-            child: const Text('Cancel'),
-          ),
-        ],
+      body: Center(
+        child: Column(
+          children: [
+            progress,
+            controls,
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _pickFile,
@@ -190,6 +205,47 @@ class _MyHomePageState extends State<MyHomePage> {
               )
             : const Icon(Icons.add),
       ),
+    );
+  }
+
+  Widget get progress {
+    if (_streamController == null) {
+      return const SizedBox();
+    }
+    int progress = ((counter / fileSize) * 100).toInt();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Sent: $counter'),
+        Text('Expected: $fileSize'),
+        Text('Progress: $progress%')
+      ],
+    );
+  }
+
+  Widget get controls {
+    if (_streamController == null) {
+      return const SizedBox();
+    }
+
+    return Row(
+      children: [
+        ElevatedButton(
+          onPressed: _streamController!.start,
+          child: const Text('Start'),
+        ),
+        ElevatedButton(
+          onPressed: _streamController!.isPaused
+              ? _streamController!.resume
+              : _streamController!.pause,
+          child: Text(_streamController!.isPaused ? 'Resume' : 'Pause'),
+        ),
+        ElevatedButton(
+          onPressed: _streamController!.cancel,
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }
