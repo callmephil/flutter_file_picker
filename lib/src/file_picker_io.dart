@@ -130,28 +130,29 @@ class FilePickerIO extends FilePicker {
     }
   }
 
-  Stream<List<int>> _openFileReadStream(File file, int chunkSize) async* {
+  Stream<Uint8List> _openFileReadStream(File file, int chunkSize) async* {
     int length = await file.length();
+    // int chunkCount = (length / chunkSize).ceil();
+    // implement randomAccess
     RandomAccessFile randomAccessFile = file.openSync(mode: FileMode.read);
+
+    // file is 13 * 1024 * 1024 bytes
+    // we want to read 5 * 1024 * 1024 bytes at a time
+    // so we need to read 3 chunks
+    // chunk 1: setPositionSync(0) & yield readSync(0 - 5 * 1024 * 1024)
+    // chunk 2: positionSync(1)  & yield readSync(5 * 1024 * 1024 - 10 * 1024 * 1024)
+    // chunk 3: positionSync(2)  & yield readSync(10 * 1024 * 1024 - 13 * 1024 * 1024)
+    //
     try {
       int start = 0;
-      while (start < length) {
-        start += chunkSize;
-        int end = start + chunkSize;
+      while (length > 0) {
+        if (start > 0) {
+          randomAccessFile.setPositionSync(start);
+        }
+        int next = length > chunkSize ? chunkSize : length;
+        yield randomAccessFile.readSync(next);
+        start += next;
       }
-
-      // bool first = true;
-      // while (length > 0) {
-      //   int toRead = length > chunkSize ? chunkSize : length;
-      //   if (first) {
-      //     first = false;
-      //   } else {
-      //     randomAccessFile.setPositionSync(toRead);
-      //   }
-
-      //   yield randomAccessFile.readSync(toRead);
-      //   length -= toRead;
-      // }
     } finally {
       randomAccessFile.closeSync();
     }
