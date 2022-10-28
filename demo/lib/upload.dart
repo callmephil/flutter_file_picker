@@ -70,9 +70,13 @@ class FileUpload {
       // if stopped - exit
       // if error -
 
-      // Should try to send the chunk
-      // If it fails, it should retry X times.
-      final response = await _sendChunk(chunk);
+      // while not offline, stopped, paused
+
+      _manageChunk(
+        rangeStart: rangeStart,
+        rangeEnd: rangeEnd,
+        chunk: chunk,
+      );
 
       _sendChunk(
         rangeStart: rangeStart,
@@ -85,6 +89,30 @@ class FileUpload {
       });
       // Compute how many bytes has been sent after an upload is successfull.
       rangeStart += chunk.length;
+    }
+  }
+
+  Future<bool> _manageChunk(Uint8List chunk, int start, int end,
+      [int attempt = 0]) async {
+    // if failed -> callManageUpload again until success or max attempts reached
+    // if success continue with start()
+    try {
+      final response = await _sendChunk(
+        rangeStart: start,
+        rangeEnd: end,
+      );
+
+      return true;
+    } catch (e) {
+      print(e);
+      // Update attempts
+      if (attempt < 3) {
+        return _manageChunk(chunk, start, end, attempt + 1);
+      }
+      // Save the chunk that has failed.
+      // do not close the stream.
+      // If max attempts reached, return false
+      return false;
     }
   }
 
