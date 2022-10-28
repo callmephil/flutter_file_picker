@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:demo/stream_subscription_controller.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart' show PlatformFile;
@@ -7,12 +9,12 @@ void _print(Object? object) {
   print(object);
 }
 
-class FileUpload {
+class UploadController {
   final String endpoint;
   final String category;
   final PlatformFile file;
   final Map<String, dynamic> headers;
-  const FileUpload({
+  const UploadController({
     this.endpoint = 'https://xverse.storkparties.com/upload',
     this.headers = const {},
     this.category = 'test',
@@ -23,7 +25,8 @@ class FileUpload {
   // UploadID
   static String _uploadID = '';
   static String _uploadPath = '';
-  static Uint8List? _currentChunk;
+  static bool _isPendingRestart = false;
+  static int _currentChunkID = 0;
   static CancelToken? _currentCancelToken;
   // Attempts
 
@@ -36,7 +39,6 @@ class FileUpload {
 
   // Has to return done(url) or error
 
-  int? get _chunkSize => _currentChunk?.length;
   int get _fileSize => file.size;
   String get _fileName => file.name;
   Stream<Uint8List> get _stream => file.readStream!;
@@ -57,50 +59,142 @@ class FileUpload {
       _getUploadID();
     }
 
-    int rangeStart = 0;
-    await for (Uint8List chunk in _stream) {
-      // Save current chunk in case of pause, failure.
-      _currentChunk = chunk;
-      // Compute the next chunk size. (sent + chunk.length - 1)
-      int rangeEnd = rangeStart + chunk.length - 1;
+    StreamSubscription<Uint8List> subscription = _stream.listen(
+      null,
+      cancelOnError: false,
+    );
 
-      // if paused - Wait before sending the next chunk.
+    int rangeStart = 0;
+    subscription.onData((chunk) async {
+      // We pause the stream and decide what we should do.
+      subscription.pause();
+
+      /* Lifecycle */
+      // ? if client is disposed (page change, picking different file). cancel the request and destroy the instance.
+      // ? We should not cancel upload if the client is not active. (switching app, tabs)
+      // ! Must implement .dispose() method.
+
+      /* PRE UPLOAD PROCCESS (INIT) */
+      // * Get the upload id.
+      // ! Must implement .getUploadID() method.
+      // ? if it fail. attempt retry,
+      // ? if it fails again, notify the client for manual init restart.
+      // ! Must implement .restart() method.
+      // ? if it succeeds, initalise _streamSubscription and continue.
+
+      /* START UPLOAD PROCCESS */
+      // * Listen to _streamSubscription
+      // * Notify the client that we are starting the upload.
+      // * Pause the stream
+      // ? if the stream fail, we must cancel the process and notify the client for re-picking.
+      // * Manage the chunk.
+
+      /* MANAGE CHUNK PROCCESS */
+      // * listen for connection changes.
+      // ! Must implement ConnectionStatusSingleton
+      // ? if the connection is offline, retry _manageChunk() after 5 seconds.
+      // ? if failure -> notify client with _isPendingRestart = true (the stream is already paused).
+      // ! Note: We should not pause the stream a second time. if we do so, we will need to resume it a second time.
+      // ! Must implement .resume() method.
+      // ? If success return true.
+      // * update chunkID & startingRange and resume the stream.
+
+      /* MANUAL RESUME PROCcESS */
+      // ? we must expose a manual resume method.
+      // ? we must expose a resume listener. variable isManualResumed.
+      // ? We must set _isManualPaused = false
+      // * if we resume and we have canceled the request
+      // * if the chunk has finished then we should resume the listener
+      // * otherwise we must restart the upload from the last chunk before running the stream.
+
+      /* RESTART PROCcESS */
+      // * if isPendingRestart -> must call _manualRestart -> manageChunk -> resume on success. <|> do nothing on failure.
+      // ? When manual restart we send a single manageChunk and if success we resume the stream.
+      // ? We repeat the whole process again until done or cancel or destroy.
+
+      /* CANCEL PROcCESS */
+      // ? we must expose a manual cancel method.
+      // ? On cancel we call cancelToken & subscription.cancel() and notify the client that the upload has been canceled.
+
+      /* PENDING RESTART PROCESS */
+      // ! Must implement .restart() method.
+      // ? if the client restart the process. we must know if upload id is available or not.
+      // ? if upload id is available, we call the .resume() method
+      // * Store the chunk in the instance so we can resume it later.
+      // ? if cancel -> notify client with _isCanceled -> clear the instance. (destroy on u.i change).
+
+      /* MANUAL PAUSE PROCCESS */
+      // ! Must implement .pause() method.
+      // ? we must expose a pause listener. variable isManualPaused.
+      // ? we need to decide if we should cancel the upload or wait till he has finished the chunk.
+      // ! note: the above can be avoided if we have smaller chunks. ~ 5 - 10mb. for carrier data.
+      // ? On manual pause we set _isManualPaused = true, and we pause the stream.
+
+      // ------------------------------------------
       // if offline - Wait and resolve before sending the next chunk.
       // if offline for too long exit
       // if stopped - exit
-      // if error -
+      // if error - check for manual restart or exit
+      // for manual restart we need to expose the function to the u.i
+      // for exit we need to expose the function to the u.i
+      // upload 5 chunks > sneding chunks 1 2 3 <> offline <attempt 1 2 3>
+      // <App is closed> destroy instance < or >
+      // pending manual restart > manual restart. > sending chunk 3 <<<
 
-      // while not offline, stopped, paused
+      // Compute the next chunk size. (sent + chunk.length - 1)
+      await _manageChunk(
+        chunk, // Uint8List
+        rangeStart, // updated after a chunk has been fully sent
+        rangeStart + chunk.length - 1, // Range end is computed here.
+      ).then((success) {
+        // on success
+        if (success) {
+          // we update the chunkID
+          _currentChunkID++;
+          // we update the rangeStart so we can compute the end of the next chunk.
+          rangeStart += chunk.length;
 
-      _manageChunk(
-        rangeStart: rangeStart,
-        rangeEnd: rangeEnd,
-        chunk: chunk,
-      );
+          // we resume stream.
+          subscription.resume();
+        } else {
+          // on failure of retries.
+          // we notify the client that it needs manual restart.
+          _isPendingRestart = true;
+          // when a restart is pending the ui must request a restart or a full shutdown.
+          // we must expose a shutdown to the client so they can cancel the upload. (any time via the cancelToken).
+          // when the client cancel the upload we must destroy the upload instance and display canceled to the user.
+          // when the client dispose if the upload is canceled we must remove it from the list.
 
-      _sendChunk(
-        rangeStart: rangeStart,
-        rangeEnd: rangeEnd,
-      ).then((res) {
+        }
+      }).catchError((error) {
         return null;
-      }, onError: (err) {
-        // if (_paused || _offline || _stopped) return;
-        _print(err);
       });
-      // Compute how many bytes has been sent after an upload is successfull.
-      rangeStart += chunk.length;
-    }
+    });
+    subscription.onError((e) {
+      _print('Stream error: $e');
+    });
+
+    subscription.onDone(() {
+      _print('Done');
+    });
   }
 
   Future<bool> _manageChunk(Uint8List chunk, int start, int end,
       [int attempt = 0]) async {
     // if failed -> callManageUpload again until success or max attempts reached
     // if success continue with start()
+    // * if offline -> throw catch -> catch -> retry < repeat until success or max attempts reached >
+    // ? offline must notify the client that it is offline and that it will retry.
+
+    // ! while not offline, not manually paused, not manually canceled we manage the chunk.
+
     try {
       final response = await _sendChunk(
         rangeStart: start,
         rangeEnd: end,
       );
+
+      // look if we are on the last chunk and get the url after it resolved.
 
       return true;
     } catch (e) {
@@ -164,10 +258,10 @@ class FileUpload {
     }
 
     late final Stream<Uint8List> chunkStream;
-    if (_currentChunk == null) {
+    if (_currentChunkID == null) {
       throw Exception('No chunk to send');
     } else {
-      chunkStream = Stream<Uint8List>.value(_currentChunk!);
+      chunkStream = Stream<Uint8List>.value(_currentChunkID!);
     }
 
     final putHeaders = {
