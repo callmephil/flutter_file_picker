@@ -96,6 +96,7 @@ class UploadController {
       // ! Must implement ConnectionStatusSingleton
       // ? if the connection is offline, retry _manageChunk() after 5 seconds.
       // ? if failure -> notify client with _isPendingRestart = true (the stream is already paused).
+      // ? Storing the chunk in the instance so we can resume it later. if needed
       // ! Note: We should not pause the stream a second time. if we do so, we will need to resume it a second time.
       // ! Must implement .resume() method.
       // * Send the chunk to the server and wait for response.
@@ -141,14 +142,15 @@ class UploadController {
       // ? We repeat the whole process again until done or cancel or destroy.
 
       /* CANCEL PROCCESS */
-      // ? we must expose a manual cancel method.
-      // ? On cancel we call cancelToken & subscription.cancel() and notify the client that the upload has been canceled.
+      // ! Must expose a manual cancel method.
+      // ? Must have a confirmation dialog before canceling.
+      // * On cancel we call cancelToken & subscription.cancel()
+      // * notify the client that the upload has been canceled.
 
       /* PENDING RESTART PROCCESS */
       // ! Must implement .restart() method.
       // ? if the client restart the process. we must know if upload id is available or not.
       // ? if upload id is available, we call the .resume() method
-      // * Store the chunk in the instance so we can resume it later.
       // ? if cancel -> notify client with _isCanceled -> clear the instance. (destroy on u.i change).
 
       // ------------------------------------------
