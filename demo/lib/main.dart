@@ -34,12 +34,16 @@ class FileUploadWidget extends StatefulWidget {
 }
 
 class _FileUploadWidgetState extends State<FileUploadWidget> {
-  late UploadController _uploadController;
+  late final UploadController _uploadController = UploadController(
+    file: widget.file,
+  );
 
   @override
   void initState() {
     super.initState();
-    _uploadController = UploadController(file: widget.file);
+    _uploadController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -86,6 +90,9 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                         Text(
                           '${(widget.file.size / 1024).ceilToDouble()}kb',
                           style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          '${_uploadController.uploadSpeed}kb/s',
                         ),
                       ],
                     ),
@@ -149,27 +156,20 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                 backgroundColor: Colors.grey[200],
                 minHeight: 5,
               ),
-              ValueListenableBuilder(
-                valueListenable: _uploadController.streamProgressNotifier,
-                builder: (context, value, child) {
-                  return LinearProgressIndicator(
-                    value: value,
-                    color: Colors.yellow[300],
-                    minHeight: 5,
-                  );
-                },
+              LinearProgressIndicator(
+                value: _uploadController.streamProgressNotifier,
+                color: Colors.yellow[300],
+                backgroundColor: Colors.transparent,
+                minHeight: 5,
               ),
               // Second indicator says the progress of the upload
-              ValueListenableBuilder(
-                valueListenable: _uploadController.uploadProgressNotifier,
-                builder: (context, value, child) {
-                  return LinearProgressIndicator(
-                    value: value,
-                    color: value == 1 ? Colors.green : Colors.blue,
-                    backgroundColor: Colors.transparent,
-                    minHeight: 5,
-                  );
-                },
+              LinearProgressIndicator(
+                value: _uploadController.uploadProgressNotifier,
+                color: _uploadController.uploadProgressNotifier == 1
+                    ? Colors.green
+                    : Colors.blue,
+                backgroundColor: Colors.transparent,
+                minHeight: 5,
               ),
             ],
           ),

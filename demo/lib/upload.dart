@@ -9,12 +9,12 @@ void _print(Object? object) {
   print(object);
 }
 
-class UploadController {
+class UploadController extends ChangeNotifier {
   final String endpoint;
   final String category;
   final PlatformFile file;
   final Map<String, dynamic> headers;
-  const UploadController({
+  UploadController({
     this.endpoint = 'https://xverse.storkparties.com/upload',
     this.headers = const {},
     this.category = 'test',
@@ -42,22 +42,46 @@ class UploadController {
   ValueNotifier<bool> get isManualPaused => _isPaused;
 
   /* Upload Progress */
-  static final ValueNotifier<double> _uploadProgressNotifier = ValueNotifier(0);
-  ValueNotifier<double> get uploadProgressNotifier => _uploadProgressNotifier;
+  static int _totalChunkSent = 0;
+  static double _uploadProgressNotifier = 0;
+  double get uploadProgressNotifier => _uploadProgressNotifier;
   void _computeUploadProgress(int count, _) {
-    _print('upload progress: $count / $_fileSize');
-    _uploadProgressNotifier.value = count / _fileSize;
+    _totalChunkSent += count;
+    _uploadProgressNotifier = count / _fileSize;
+    _setUploadTimeStamp();
+    notifyListeners();
+  }
+
+  /* Upload time stamp */
+  static List<int> _uploadTimeStamps = [];
+  void _setUploadTimeStamp() {
+    if (_uploadTimeStamps.length < 2) {
+      _uploadTimeStamps.add(DateTime.now().millisecondsSinceEpoch);
+    } else {
+      _uploadTimeStamps.removeAt(0);
+      _uploadTimeStamps.add(DateTime.now().millisecondsSinceEpoch);
+    }
+  }
+
+  double get uploadSpeed {
+    if (_uploadTimeStamps.length < 2) {
+      return 0;
+    }
+    final int timeDifference = _uploadTimeStamps[1] - _uploadTimeStamps[0];
+    final int sizeDifference = _fileSize - _totalChunkSent;
+    return sizeDifference / timeDifference;
   }
 
   /* Chunk Progress */
   static int _rangeStart = 0;
   static Uint8List? _savedChunk;
 
-  static final ValueNotifier<double> _streamProgressNotifier = ValueNotifier(0);
-  ValueNotifier<double> get streamProgressNotifier => _streamProgressNotifier;
-  void _computeStreamProgress() {
+  static double _streamProgressNotifier = 0;
+  double get streamProgressNotifier => _streamProgressNotifier;
+  void _computeStreamProgress(int sent) {
     _print('stream progress: $_rangeStart / $_fileSize');
-    _streamProgressNotifier.value = _rangeStart / _fileSize;
+    _streamProgressNotifier = sent / _fileSize;
+    notifyListeners();
   }
   // Compute time it takes to upload a chunk and return a time estimation for completion.
 
@@ -182,7 +206,8 @@ class UploadController {
     Uint8List chunk, [
     int attempt = 0,
   ]) async {
-    _computeStreamProgress();
+    final next = _rangeStart + chunk.length;
+    _computeStreamProgress(next);
 
     try {
       await _sendChunk(
@@ -192,7 +217,6 @@ class UploadController {
       );
 
       _rangeStart += chunk.length;
-      _streamProgressNotifier.value++;
       return true;
     } catch (e) {
       _print(e);
@@ -212,7 +236,7 @@ class UploadController {
     required int rangeEnd,
   }) {
     if (_uploadID.isEmpty) {
-      throw Exception('Upload ID not set');
+      throw Exception('Upload is empty');
     }
 
     final putHeaders = {
