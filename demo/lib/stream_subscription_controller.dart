@@ -20,7 +20,7 @@ typedef BufferSize = int;
 const BufferSize kb = 1024;
 const BufferSize mb = kb * kb;
 const BufferSize gb = mb * mb;
-const BufferSize kMaxBufferSize = 100 * mb;
+const BufferSize kMaxBufferSize = 5 * mb;
 
 ///
 typedef IntCallback = void Function(int value);

@@ -81,3 +81,15 @@
 // ? if the client restart the process. we must know if upload id is available or not.
 // ? if upload id is available, we call the .resume() method
 // ? if cancel -> notify client with _isCanceled -> clear the instance. (destroy on u.i change).
+
+
+// ------------------------------------------
+// if offline - Wait and resolve before sending the next chunk.
+// if offline for too long exit
+// if stopped - exit
+// if error - check for manual restart or exit
+// for manual restart we need to expose the function to the u.i
+// for exit we need to expose the function to the u.i
+// upload 5 chunks > sneding chunks 1 2 3 <> offline <attempt 1 2 3>
+// <App is closed> destroy instance < or >
+// pending manual restart > manual restart. > sending chunk 3 <<<

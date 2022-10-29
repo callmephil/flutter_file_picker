@@ -24,7 +24,6 @@ class UploadController {
   /* Platform File */
   int get _fileSize => file.size;
   String get _fileName => file.name;
-  Stream<Uint8List> get _stream => file.readStream!;
 
   /* Dio */
   static String _uploadID = '';
@@ -37,37 +36,49 @@ class UploadController {
 
   /* Data */
   static final ValueNotifier<bool> _isPendingRestart = ValueNotifier(false);
-  ValueNotifier<bool> get isPendingRestart => _isPendingRestart;
+  ValueNotifier<bool> get pendingRestartNotifier => _isPendingRestart;
 
   static final ValueNotifier<bool> _isPaused = ValueNotifier(false);
   ValueNotifier<bool> get isManualPaused => _isPaused;
 
   /* Upload Progress */
-  static final ValueNotifier<double> _uploadProgressNotifier =
-      ValueNotifier(0.0);
-  ValueNotifier<double> get progressNotifier => _uploadProgressNotifier;
+  static final ValueNotifier<double> _uploadProgressNotifier = ValueNotifier(0);
+  ValueNotifier<double> get uploadProgressNotifier => _uploadProgressNotifier;
+  void _computeUploadProgress(int count, _) {
+    _print('upload progress: $count / $_fileSize');
+    _uploadProgressNotifier.value = count / _fileSize;
+  }
 
   /* Chunk Progress */
+  static int _rangeStart = 0;
   static Uint8List? _savedChunk;
-  int get _chunkCount => (_fileSize / 100 * 1024 * 1024).ceil();
+
+  static final ValueNotifier<double> _streamProgressNotifier = ValueNotifier(0);
+  ValueNotifier<double> get streamProgressNotifier => _streamProgressNotifier;
+  void _computeStreamProgress() {
+    _print('stream progress: $_rangeStart / $_fileSize');
+    _streamProgressNotifier.value = _rangeStart / _fileSize;
+  }
+  // Compute time it takes to upload a chunk and return a time estimation for completion.
 
   /* Stream */
-  static StreamSubscription? _streamSubscription;
-  StreamSubscription get streamSubscription {
-    if (_streamSubscription == null) {
-      throw Exception('There is no stream available');
+  static StreamSubscription<Uint8List>? _streamSubscription;
+  void _initStreamSubscription(void Function(Uint8List) onData) {
+    if (file.readStream == null) {
+      throw Exception('$_fileName File does not contains a stream.');
     }
 
-    return _streamSubscription!;
+    _streamSubscription = file.readStream!.listen(
+      onData,
+      onError: (Object error, StackTrace stackTrace) {
+        print('Stream error $error');
+      },
+      cancelOnError: false,
+      onDone: () {
+        _print('Done');
+      },
+    );
   }
-
-  set streamSubscription(StreamSubscription subscription) {
-    _streamSubscription = subscription;
-  }
-
-  static final ValueNotifier<int> _streamProgressNotifier = ValueNotifier(0);
-  ValueNotifier<int> get streamProgressNotifier => _streamProgressNotifier;
-  // Compute time it takes to upload a chunk and return a time estimation for completion.
 
   void _cancelRequest() {
     if (_currentCancelToken == null) {
@@ -77,133 +88,136 @@ class UploadController {
     _currentCancelToken?.cancel();
   }
 
-  start() async {
+  void start() async {
     // if (_paused || _offline || _stopped) return;
     if (_uploadID.isEmpty) {
-      _getUploadID();
+      await _getUploadID();
     }
 
-    StreamSubscription<Uint8List> subscription = _stream.listen(
-      null,
-      cancelOnError: false,
-    );
+    _initStreamSubscription((Uint8List chunk) {
+      _streamSubscription?.pause();
 
-    int rangeStart = 0;
-    subscription.onData((chunk) async {
-      // We pause the stream and decide what we should do.
-      subscription.pause();
-
-      // Compute the next chunk size. (sent + chunk.length - 1)
-      await _manageChunk(
-        chunk, // Uint8List
-        rangeStart, // updated after a chunk has been fully sent
-        rangeStart + chunk.length - 1, // Range end is computed here.
-      ).then((success) {
-        if (!success) {
-          // retries failed,  we notify the client that it needs manual restart.
-          _isPendingRestart.value = true;
-          // the stream is paused. will resume on manual restart.
-        } else {
-          // we resume stream.
-          subscription.resume();
-        }
-      }).catchError((error) {
-        return null;
+      _manageChunk(chunk).then(manageStream).catchError((error) {
+        _print(error);
       });
     });
-    subscription.onError((e) {
-      _print('Stream error: $e');
-    });
+  }
 
-    subscription.onDone(() {
-      _print('Done');
+  void pause() async {
+    _streamSubscription?.pause();
+    _isPaused.value = true;
+  }
+
+  void resume() async {
+    _streamSubscription?.resume();
+    _isPaused.value = false;
+  }
+
+  void abort() async {
+    _cancelRequest();
+  }
+
+  void restart() {
+    if (_streamSubscription == null) {
+      throw Exception('Stream subscription is null');
+    }
+
+    if (_savedChunk == null) {
+      // Invalidate the upload.
+      throw Exception('There is no chunk to retrieve, aborting');
+    }
+
+    // Notify client we can restart.
+    _isPendingRestart.value = false;
+
+    _manageChunk(_savedChunk!).then(manageStream).catchError((error) {
+      _print(error);
     });
   }
 
-  Future<bool> _manageChunk(Uint8List chunk, int start, int end,
-      [int attempt = 0]) async {
-    // if failed -> callManageUpload again until success or max attempts reached
-    // if success continue with start()
-    // * if offline -> throw catch -> catch -> retry < repeat until success or max attempts reached >
-    // ? offline must notify the client that it is offline and that it will retry.
+  Future<void> _getUploadID() async {
+    final response = await _requestUploadID();
 
-    // ! while not offline, not manually paused, not manually canceled we manage the chunk.
-
-    try {
-      final response = await _sendChunk(
-        rangeStart: start,
-        rangeEnd: end,
-      );
-
-      // look if we are on the last chunk and get the url after it resolved.
-
-      return true;
-    } catch (e) {
-      print(e);
-      // Update attempts
-      if (attempt < 3) {
-        return _manageChunk(chunk, start, end, attempt + 1);
-      }
-
-      _savedChunk = chunk;
-      // Save the chunk that has failed.
-      // do not close the stream.
-      // If max attempts reached, return false
-      return false;
+    if (response.statusCode == 200) {
+      _uploadID = response.data['uploadId'];
+      _uploadPath = response.data['fileName'];
+    } else {
+      throw Exception('Failed to get upload ID');
     }
   }
 
-  void _getUploadID() async {
+  Future<Response> _requestUploadID() {
     final Map<String, dynamic> postHeaders = {
       ...headers,
     };
 
-    final response = await Dio().postUri(
-      Uri.parse(endpoint),
+    _setCancelToken();
+
+    return Dio().post(
+      endpoint,
       options: Options(
         headers: postHeaders,
-        contentType: 'application/json',
+        validateStatus: (status) {
+          return status == 200;
+        },
       ),
       data: {
-        'fileName': _fileName,
-        'fileSize': _fileSize,
         'category': category,
+        'filename': _fileName,
+        'filesize': _fileSize,
       },
       cancelToken: _currentCancelToken,
     );
+  }
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to get upload ID');
+  void manageStream(bool success) {
+    if (success) {
+      _streamSubscription?.resume();
+    } else {
+      _isPendingRestart.value = true;
     }
+  }
 
-    if (response.data == null) {
-      throw Exception('_getUploadID: Response data is null');
+  Future<bool> _manageChunk(
+    Uint8List chunk, [
+    int attempt = 0,
+  ]) async {
+    _computeStreamProgress();
+
+    try {
+      await _sendChunk(
+        chunk: chunk,
+        rangeStart: _rangeStart,
+        rangeEnd: _rangeStart + chunk.length - 1,
+      );
+
+      _rangeStart += chunk.length;
+      _streamProgressNotifier.value++;
+      return true;
+    } catch (e) {
+      _print(e);
+      if (attempt < 3) {
+        _print('$chunk, $start, ${attempt++}');
+        return _manageChunk(chunk, attempt++);
+      }
+
+      _savedChunk = chunk;
+      return false;
     }
-
-    if (response.data?['uploadID'] == null) {
-      throw Exception('_getUploadID: Failed to get upload ID');
-    }
-
-    if (response.data?['fileName'] == null) {
-      throw Exception('_getUploadID: Failed to get upload Path');
-    }
-
-    _uploadID = response.data?['uploadID'];
-    _uploadPath = response.data?['fileName'];
   }
 
   Future<Response> _sendChunk({
-    Uint8List? chunk,
+    required Uint8List chunk,
     required int rangeStart,
     required int rangeEnd,
-  }) async {
+  }) {
     if (_uploadID.isEmpty) {
       throw Exception('Upload ID not set');
     }
 
     final putHeaders = {
       'upload-id': _uploadID,
-      Headers.contentLengthHeader: _getAvailableChunkLength(chunk),
+      Headers.contentLengthHeader: chunk.length,
       'content-type': 'application/octet-stream',
       'content-range': 'bytes $rangeStart-$rangeEnd/$_fileSize',
       ...headers,
@@ -222,38 +236,11 @@ class UploadController {
         followRedirects: false,
         validateStatus: _validateStatus,
       ),
-      data: Stream.value(_getAvailableChunk(chunk)),
+      data: Stream.value(chunk),
       onReceiveProgress: _onReceiveProgress,
-      onSendProgress: _onSendProgress,
+      onSendProgress: _computeUploadProgress,
       cancelToken: _currentCancelToken,
     );
-  }
-
-  // We are retrieving length from the chunk so we don't store it in memory.
-  int _getAvailableChunkLength(Uint8List? currChunk) {
-    if (currChunk != null) {
-      return currChunk.length;
-    }
-
-    if (_savedChunk != null) {
-      return _savedChunk!.length;
-    }
-    // Invalidate the upload.
-    throw Exception('There is no chunk to read length from, aborting');
-  }
-
-  // We are retrieving the chunk so we don't store it in memory.
-  Uint8List _getAvailableChunk(Uint8List? currChunk) {
-    if (currChunk != null) {
-      return currChunk;
-    }
-
-    if (_savedChunk != null) {
-      return _savedChunk!;
-    }
-
-    // Invalidate the upload.
-    throw Exception('There is no chunk to retrieve, aborting');
   }
 
   void _setCancelToken() {
@@ -275,18 +262,6 @@ class UploadController {
 
   // We recieve the signal that the stream is ready to continue.
   void _onReceiveProgress(int count, int total) {
-    // we update the chunkID
-    _streamProgressNotifier.value++;
-    // we update the rangeStart so we can compute the end of the next chunk.
-    rangeStart += chunk.length;
-
-    _subscription.resume();
-
     _print('onReceiveProgress: $count/$total');
-  }
-
-  // We send the signal to the client that the stream is running.
-  void _onSendProgress(int count, int total) {
-    _print('onSendProgress: $count/$total');
   }
 }

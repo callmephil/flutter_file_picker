@@ -1,6 +1,5 @@
-import 'dart:async';
-
 import 'package:demo/stream_subscription_controller.dart';
+import 'package:demo/upload.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -18,192 +17,302 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const DemoPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
+class FileUploadWidget extends StatefulWidget {
+  final PlatformFile file;
+  const FileUploadWidget({
+    super.key,
+    required this.file,
+  });
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<FileUploadWidget> createState() => _FileUploadWidgetState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  StreamSubscriptionController? _streamController;
+class _FileUploadWidgetState extends State<FileUploadWidget> {
+  late UploadController _uploadController;
+
+  @override
+  void initState() {
+    super.initState();
+    _uploadController = UploadController(file: widget.file);
+  }
+
+  @override
+  void dispose() {
+    //
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // if (_uploadController == null) {
+    //   return const Center(child: Text('No file selected'));
+    // }
+
+    return Container(
+      key: ValueKey(widget.file.name),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.rectangle,
+      ),
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.image_outlined, size: 48),
+                    const SizedBox(width: 15),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.file.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${(widget.file.size / 1024).ceilToDouble()}kb',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                // should be a status notifier, based on that we render 3 different states
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        _uploadController.start();
+                      },
+                      child: const Text('Start'),
+                    ),
+                    // -----------
+                    // Same state
+                    TextButton(
+                      onPressed: () {
+                        _uploadController.pause();
+                      },
+                      child: const Text('Pause'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        _uploadController.resume();
+                      },
+                      child: const Text('Resume'),
+                    ),
+                    // -----------
+                    // Same State
+                    TextButton(
+                      onPressed: () {
+                        _uploadController.restart();
+                      },
+                      child: const Text('Restart'),
+                    ),
+                    // Must have a popup to confirm
+                    TextButton(
+                      onPressed: () {
+                        _uploadController.abort();
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        _uploadController.abort();
+                      },
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Stack(
+            children: [
+              // background color
+              LinearProgressIndicator(
+                value: 0,
+                backgroundColor: Colors.grey[200],
+                minHeight: 5,
+              ),
+              ValueListenableBuilder(
+                valueListenable: _uploadController.streamProgressNotifier,
+                builder: (context, value, child) {
+                  return LinearProgressIndicator(
+                    value: value,
+                    color: Colors.yellow[300],
+                    minHeight: 5,
+                  );
+                },
+              ),
+              // Second indicator says the progress of the upload
+              ValueListenableBuilder(
+                valueListenable: _uploadController.uploadProgressNotifier,
+                builder: (context, value, child) {
+                  return LinearProgressIndicator(
+                    value: value,
+                    color: value == 1 ? Colors.green : Colors.blue,
+                    backgroundColor: Colors.transparent,
+                    minHeight: 5,
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DemoPage extends StatefulWidget {
+  const DemoPage({super.key});
+
+  @override
+  State<DemoPage> createState() => DemoPageState();
+}
+
+class DemoPageState extends State<DemoPage> {
+  final ValueNotifier<List<FileUploadWidget>> _files = ValueNotifier([]);
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   void _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
       withReadStream: true,
       readStreamChunkSize: kMaxBufferSize,
       onFileLoading: (p0) => print(p0),
     );
-    final file = result?.files.first;
-    if (file == null) {
-      print('file is null');
+
+    if (result == null) {
       return;
     }
 
-    if (file.readStream == null) {
-      print('file readStream is null');
+    if (result.files.isEmpty) {
+      print('No file selected');
       return;
     }
 
-    await Future.delayed(Duration(seconds: 5));
+    final files = result.files.map((file) {
+      return FileUploadWidget(key: ValueKey(file.name), file: file);
+    }).toList();
 
-    final broadCastStream = file.readStream!.asBroadcastStream();
-
-    final subscription1 = broadCastStream.listen(
-      (event) {
-        print('Stream 1 ${event.length}');
-      },
-      onDone: () => print('done subscription 1'),
-    );
-
-    final subscription2 = broadCastStream.listen(
-      (event) {
-        print('Stream 2 ${event.length}');
-      },
-      onDone: () => print('done subscription 2'),
-    );
-
-    final subscription3 = broadCastStream.listen(
-      (event) {
-        print('Stream 3 ${event.length}');
-      },
-      onDone: () => print('done subscription 3'),
-    );
-
-    final subscription4 = broadCastStream.listen(
-      (event) {
-        print('Stream 4 ${event.length}');
-      },
-      onDone: () => print('done subscription 4'),
-    );
-
-    final subscription5 = broadCastStream.listen(
-      (event) {
-        print('Stream 5 ${event.length}');
-      },
-      onDone: () => print('done subscription 5'),
-    );
-
-    // _streamController = StreamSubscriptionController(
-    //   file.readStream!,
-    //   size: file.size,
-    //   onStatusChanged: (type) {
-    //     print(type.name);
-    //     setState(() {});
-    //     switch (type) {
-    //       case StatusType.onStart:
-    //         break;
-    //       case StatusType.onPause:
-    //         // Should also cancel the onProgress callback
-    //         break;
-    //       case StatusType.onResume:
-    //         break;
-    //       case StatusType.onCancel:
-    //         setState(() {});
-    //         break;
-    //       case StatusType.onError:
-    //         break;
-    //       case StatusType.onDone:
-    //         break;
-    //     }
-    //   },
-    //   onStart: () async {
-    //     await delayedPrint('onStart');
-    //   },
-    //   onProgress: (data) async {
-    //     print('ticking');
-    //     await delayedPrint(data.length);
-    //     // setState(() {});
-    //   },
-    // );
-
-    // setState(() {});
-  }
-
-  Future delayedPrint<T>(T object, [int delay = 500]) {
-    print('Processing delay: $delay');
-    return Future.delayed(Duration(milliseconds: delay), () {
-      print('Future Results: $object');
-    });
+    _files.value = List.from(_files.value)..addAll(files);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: const Text('Flutter Stream Demo'),
       ),
-      body: Center(
-        child: Column(
-          children: [
-            progress,
-            controls,
-          ],
-        ),
+      body: Column(
+        children: [
+          const Text('Upload list'),
+          Expanded(
+            child: ValueListenableBuilder(
+              valueListenable: _files,
+              builder: (context, value, child) {
+                print('update');
+                if (value.isEmpty) {
+                  return const Center(child: Text('No file selected'));
+                }
+                return ListView.builder(
+                  key: const ValueKey('file-list'),
+                  itemCount: value.length,
+                  padding: const EdgeInsets.all(25),
+                  itemBuilder: (context, index) {
+                    return value[index];
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _pickFile,
         tooltip: 'Pick File',
-        child: _streamController != null
-            ? ValueListenableBuilder(
-                valueListenable: _streamController!.progress,
-                builder: (context, value, child) {
-                  print(value);
-                  return CircularProgressIndicator(
-                    color: Colors.white,
-                    value: value,
-                  );
-                },
-              )
-            : const Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }
-
-  Widget get progress {
-    if (_streamController == null) {
-      return const SizedBox();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Sent: ${_streamController?.dataSent}'),
-        Text('Expected: ${_streamController?.size}'),
-        Text('Progress: ${_streamController?.progress.value}%')
-      ],
-    );
-  }
-
-  Widget get controls {
-    if (_streamController == null) {
-      return const SizedBox();
-    }
-
-    return Row(
-      children: [
-        ElevatedButton(
-          onPressed: _streamController!.start,
-          child: const Text('Start'),
-        ),
-        ElevatedButton(
-          onPressed: _streamController!.isPaused
-              ? _streamController!.resume
-              : _streamController!.pause,
-          child: Text(_streamController!.isPaused ? 'Resume' : 'Pause'),
-        ),
-        ElevatedButton(
-          onPressed: _streamController!.cancel,
-          child: const Text('Cancel'),
-        ),
-      ],
-    );
-  }
 }
+
+// class MyHomePage extends StatefulWidget {
+//   const MyHomePage({super.key, required this.title});
+
+//   final String title;
+
+//   @override
+//   State<MyHomePage> createState() => _MyHomePageState();
+// }
+
+// class _MyHomePageState extends State<MyHomePage> {
+//   StreamSubscriptionController? _streamController;
+
+//   Future delayedPrint<T>(T object, [int delay = 500]) {
+//     print('Processing delay: $delay');
+//     return Future.delayed(Duration(milliseconds: delay), () {
+//       print('Future Results: $object');
+//     });
+//   }
+
+//   Widget get progress {
+//     if (_streamController == null) {
+//       return const SizedBox();
+//     }
+
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         Text('Sent: ${_streamController?.dataSent}'),
+//         Text('Expected: ${_streamController?.size}'),
+//         Text('Progress: ${_streamController?.progress.value}%')
+//       ],
+//     );
+//   }
+
+//   Widget get controls {
+//     if (_streamController == null) {
+//       return const SizedBox();
+//     }
+
+//     return Row(
+//       children: [
+//         ElevatedButton(
+//           onPressed: _streamController!.start,
+//           child: const Text('Start'),
+//         ),
+//         ElevatedButton(
+//           onPressed: _streamController!.isPaused
+//               ? _streamController!.resume
+//               : _streamController!.pause,
+//           child: Text(_streamController!.isPaused ? 'Resume' : 'Pause'),
+//         ),
+//         ElevatedButton(
+//           onPressed: _streamController!.cancel,
+//           child: const Text('Cancel'),
+//         ),
+//       ],
+//     );
+//   }
+// }
