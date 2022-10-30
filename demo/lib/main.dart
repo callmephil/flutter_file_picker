@@ -42,7 +42,9 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
   void initState() {
     super.initState();
     _uploadController.addListener(() {
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -88,11 +90,8 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${(widget.file.size / 1024).ceilToDouble()}kb',
+                          '${(widget.file.size / 1024).ceilToDouble()}kb | ${_uploadController.uploadSpeed}kb/s,',
                           style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          '${_uploadController.uploadSpeed}kb/s',
                         ),
                       ],
                     ),
@@ -148,30 +147,29 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
               ],
             ),
           ),
-          Stack(
-            children: [
-              // background color
-              LinearProgressIndicator(
-                value: 0,
-                backgroundColor: Colors.grey[200],
-                minHeight: 5,
-              ),
-              LinearProgressIndicator(
-                value: _uploadController.streamProgressNotifier,
-                color: Colors.yellow[300],
-                backgroundColor: Colors.transparent,
-                minHeight: 5,
-              ),
-              // Second indicator says the progress of the upload
-              LinearProgressIndicator(
-                value: _uploadController.uploadProgressNotifier,
-                color: _uploadController.uploadProgressNotifier == 1
-                    ? Colors.green
-                    : Colors.blue,
-                backgroundColor: Colors.transparent,
-                minHeight: 5,
-              ),
-            ],
+          ColoredBox(
+            color: _uploadController.status == UploadStatus.canceled
+                ? Colors.red
+                : Colors.grey[200]!,
+            child: Stack(
+              children: [
+                LinearProgressIndicator(
+                  value: _uploadController.streamProgress,
+                  color: Colors.yellow[300],
+                  backgroundColor: Colors.transparent,
+                  minHeight: 5,
+                ),
+                // Second indicator says the progress of the upload
+                LinearProgressIndicator(
+                  value: _uploadController.uploadProgress,
+                  color: _uploadController.uploadProgress == 1
+                      ? Colors.green
+                      : Colors.blue,
+                  backgroundColor: Colors.transparent,
+                  minHeight: 5,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -256,63 +254,3 @@ class DemoPageState extends State<DemoPage> {
     );
   }
 }
-
-// class MyHomePage extends StatefulWidget {
-//   const MyHomePage({super.key, required this.title});
-
-//   final String title;
-
-//   @override
-//   State<MyHomePage> createState() => _MyHomePageState();
-// }
-
-// class _MyHomePageState extends State<MyHomePage> {
-//   StreamSubscriptionController? _streamController;
-
-//   Future delayedPrint<T>(T object, [int delay = 500]) {
-//     print('Processing delay: $delay');
-//     return Future.delayed(Duration(milliseconds: delay), () {
-//       print('Future Results: $object');
-//     });
-//   }
-
-//   Widget get progress {
-//     if (_streamController == null) {
-//       return const SizedBox();
-//     }
-
-//     return Column(
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         Text('Sent: ${_streamController?.dataSent}'),
-//         Text('Expected: ${_streamController?.size}'),
-//         Text('Progress: ${_streamController?.progress.value}%')
-//       ],
-//     );
-//   }
-
-//   Widget get controls {
-//     if (_streamController == null) {
-//       return const SizedBox();
-//     }
-
-//     return Row(
-//       children: [
-//         ElevatedButton(
-//           onPressed: _streamController!.start,
-//           child: const Text('Start'),
-//         ),
-//         ElevatedButton(
-//           onPressed: _streamController!.isPaused
-//               ? _streamController!.resume
-//               : _streamController!.pause,
-//           child: Text(_streamController!.isPaused ? 'Resume' : 'Pause'),
-//         ),
-//         ElevatedButton(
-//           onPressed: _streamController!.cancel,
-//           child: const Text('Cancel'),
-//         ),
-//       ],
-//     );
-//   }
-// }

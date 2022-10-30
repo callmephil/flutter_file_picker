@@ -9,6 +9,15 @@ void _print(Object? object) {
   print(object);
 }
 
+enum UploadStatus {
+  notStarted,
+  active,
+  paused,
+  completed,
+  canceled,
+  failed,
+}
+
 class UploadController extends ChangeNotifier {
   final String endpoint;
   final String category;
@@ -34,26 +43,27 @@ class UploadController extends ChangeNotifier {
 
   static CancelToken? _currentCancelToken;
 
-  /* Data */
-  static final ValueNotifier<bool> _isPendingRestart = ValueNotifier(false);
-  ValueNotifier<bool> get pendingRestartNotifier => _isPendingRestart;
-
-  static final ValueNotifier<bool> _isPaused = ValueNotifier(false);
-  ValueNotifier<bool> get isManualPaused => _isPaused;
+  /* Statuses */
+  UploadStatus _status = UploadStatus.notStarted;
+  UploadStatus get status => _status;
+  void _setStatus(UploadStatus status) {
+    _status = status;
+    notifyListeners();
+  }
 
   /* Upload Progress */
   static int _totalChunkSent = 0;
-  static double _uploadProgressNotifier = 0;
-  double get uploadProgressNotifier => _uploadProgressNotifier;
+  static double _uploadProgress = 0;
+  double get uploadProgress => _uploadProgress;
   void _computeUploadProgress(int count, _) {
     _totalChunkSent += count;
-    _uploadProgressNotifier = count / _fileSize;
+    _uploadProgress = count / _fileSize;
     _setUploadTimeStamp();
     notifyListeners();
   }
 
   /* Upload time stamp */
-  static List<int> _uploadTimeStamps = [];
+  static final List<int> _uploadTimeStamps = [];
   void _setUploadTimeStamp() {
     if (_uploadTimeStamps.length < 2) {
       _uploadTimeStamps.add(DateTime.now().millisecondsSinceEpoch);
@@ -76,11 +86,11 @@ class UploadController extends ChangeNotifier {
   static int _rangeStart = 0;
   static Uint8List? _savedChunk;
 
-  static double _streamProgressNotifier = 0;
-  double get streamProgressNotifier => _streamProgressNotifier;
+  static double _streamProgress = 0;
+  double get streamProgress => _streamProgress;
   void _computeStreamProgress(int sent) {
     _print('stream progress: $_rangeStart / $_fileSize');
-    _streamProgressNotifier = sent / _fileSize;
+    _streamProgress = sent / _fileSize;
     notifyListeners();
   }
   // Compute time it takes to upload a chunk and return a time estimation for completion.
@@ -89,13 +99,13 @@ class UploadController extends ChangeNotifier {
   static StreamSubscription<Uint8List>? _streamSubscription;
   void _initStreamSubscription(void Function(Uint8List) onData) {
     if (file.readStream == null) {
-      throw Exception('$_fileName File does not contains a stream.');
+      // throw Exception('$_fileName File does not contains a stream.');
     }
 
     _streamSubscription = file.readStream!.listen(
       onData,
       onError: (Object error, StackTrace stackTrace) {
-        print('Stream error $error');
+        // print('Stream error $error');
       },
       cancelOnError: false,
       onDone: () {
@@ -106,7 +116,7 @@ class UploadController extends ChangeNotifier {
 
   void _cancelRequest() {
     if (_currentCancelToken == null) {
-      throw Exception('Request not in progress');
+      // throw Exception('Request not in progress');
     }
 
     _currentCancelToken?.cancel();
@@ -114,9 +124,13 @@ class UploadController extends ChangeNotifier {
 
   void start() async {
     // if (_paused || _offline || _stopped) return;
+    if (_status == UploadStatus.canceled) return;
+
     if (_uploadID.isEmpty) {
       await _getUploadID();
     }
+
+    _setStatus(UploadStatus.active);
 
     _initStreamSubscription((Uint8List chunk) {
       _streamSubscription?.pause();
@@ -128,31 +142,70 @@ class UploadController extends ChangeNotifier {
   }
 
   void pause() async {
-    _streamSubscription?.pause();
-    _isPaused.value = true;
+    // if (_status != UploadStatus.active) return;
+
+    if (_streamSubscription?.isPaused == false) {
+      _streamSubscription?.pause();
+    }
+
+    _setStatus(UploadStatus.paused);
   }
 
+  // Check if it's manually paused or not.
   void resume() async {
     _streamSubscription?.resume();
-    _isPaused.value = false;
+    _setStatus(UploadStatus.active);
   }
 
-  void abort() async {
-    _cancelRequest();
+  void abort({bool failed = false}) {
+    try {
+      if (failed) {
+        // When failed we can still retry.
+        _setStatus(UploadStatus.failed);
+      } else {
+        _streamSubscription?.cancel();
+        _currentCancelToken!.cancel(Exception('Upload cancelled by the user'));
+        _setStatus(UploadStatus.canceled);
+        _clear();
+      }
+      notifyListeners();
+    } catch (e) {
+      print('canceled');
+    }
+  }
+
+  @override
+  void dispose() {
+    _clear();
+    super.dispose();
+  }
+
+  void _clear() {
+    _streamSubscription = null;
+    _currentCancelToken = null;
+    _uploadProgress = 0;
+    _streamProgress = 0;
+    _totalChunkSent = 0;
+    _rangeStart = 0;
+    _uploadID = '';
+    _uploadPath = '';
+    _uploadTimeStamps.clear();
+    _savedChunk = null;
+    notifyListeners();
   }
 
   void restart() {
     if (_streamSubscription == null) {
-      throw Exception('Stream subscription is null');
+      // throw Exception('Stream subscription is null');
     }
 
     if (_savedChunk == null) {
       // Invalidate the upload.
-      throw Exception('There is no chunk to retrieve, aborting');
+      // throw Exception('There is no chunk to retrieve, aborting');
     }
 
     // Notify client we can restart.
-    _isPendingRestart.value = false;
+    // _isPendingRestart.value = false;
 
     _manageChunk(_savedChunk!).then(manageStream).catchError((error) {
       _print(error);
@@ -166,7 +219,7 @@ class UploadController extends ChangeNotifier {
       _uploadID = response.data['uploadId'];
       _uploadPath = response.data['fileName'];
     } else {
-      throw Exception('Failed to get upload ID');
+      // throw Exception('Failed to get upload ID');
     }
   }
 
@@ -198,7 +251,7 @@ class UploadController extends ChangeNotifier {
     if (success) {
       _streamSubscription?.resume();
     } else {
-      _isPendingRestart.value = true;
+      // _isPendingRestart.value = true;
     }
   }
 
@@ -206,6 +259,10 @@ class UploadController extends ChangeNotifier {
     Uint8List chunk, [
     int attempt = 0,
   ]) async {
+    if (status == UploadStatus.canceled) {
+      return false;
+    }
+
     final next = _rangeStart + chunk.length;
     _computeStreamProgress(next);
 
@@ -215,17 +272,66 @@ class UploadController extends ChangeNotifier {
         rangeStart: _rangeStart,
         rangeEnd: _rangeStart + chunk.length - 1,
       );
+      if (status == UploadStatus.canceled) {
+        return false;
+      }
 
       _rangeStart += chunk.length;
       return true;
     } catch (e) {
-      _print(e);
+      // _print(e);
       if (attempt < 3) {
-        _print('$chunk, $start, ${attempt++}');
+        _print('${attempt++}');
         return _manageChunk(chunk, attempt++);
       }
 
       _savedChunk = chunk;
+      return false;
+    }
+  }
+
+  Future<bool> _sendChunkResoved({
+    required Uint8List chunk,
+    required int rangeStart,
+    required int rangeEnd,
+  }) async {
+    if (_uploadID.isEmpty) {
+      _setStatus(UploadStatus.failed);
+    }
+
+    final putHeaders = {
+      'upload-id': _uploadID,
+      Headers.contentLengthHeader: chunk.length,
+      'content-type': 'application/octet-stream',
+      'content-range': 'bytes $rangeStart-$rangeEnd/$_fileSize',
+      ...headers,
+    };
+
+    // We need a cancel token for each request.
+    _setCancelToken();
+
+    try {
+      final response = await Dio().putUri(
+        Uri.parse(endpoint),
+        options: Options(
+          headers: putHeaders,
+          followRedirects: false,
+          validateStatus: _validateStatus,
+        ),
+        data: Stream.value(chunk),
+        onReceiveProgress: _onReceiveProgress,
+        onSendProgress: _computeUploadProgress,
+        cancelToken: _currentCancelToken,
+      );
+
+      print(response);
+
+      return true;
+    } on DioError catch (e) {
+      _print(e);
+      return false;
+    } catch (e) {
+      _print(e);
       return false;
     }
   }
@@ -236,7 +342,7 @@ class UploadController extends ChangeNotifier {
     required int rangeEnd,
   }) {
     if (_uploadID.isEmpty) {
-      throw Exception('Upload is empty');
+      // throw Exception('Upload is empty');
     }
 
     final putHeaders = {
@@ -272,7 +378,7 @@ class UploadController extends ChangeNotifier {
       _currentCancelToken = CancelToken();
     } catch (e) {
       _print(e);
-      throw Exception('Cancel Token not assignable, aborting');
+      // throw Exception('Cancel Token not assignable, aborting');
     }
   }
 
