@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:demo/stream_subscription_controller.dart';
 import 'package:demo/upload.dart';
 import 'package:flutter/material.dart';
@@ -23,10 +25,10 @@ class MyApp extends StatelessWidget {
 }
 
 class FileUploadWidget extends StatefulWidget {
-  final PlatformFile file;
+  final UploadController controller;
   const FileUploadWidget({
     super.key,
-    required this.file,
+    required this.controller,
   });
 
   @override
@@ -34,14 +36,10 @@ class FileUploadWidget extends StatefulWidget {
 }
 
 class _FileUploadWidgetState extends State<FileUploadWidget> {
-  late final UploadController _uploadController = UploadController(
-    file: widget.file,
-  );
-
   @override
   void initState() {
     super.initState();
-    _uploadController.addListener(() {
+    widget.controller.addListener(() {
       if (mounted) {
         setState(() {});
       }
@@ -54,14 +52,18 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
     super.dispose();
   }
 
+  UploadController get controller => widget.controller;
+
   @override
   Widget build(BuildContext context) {
     // if (_uploadController == null) {
     //   return const Center(child: Text('No file selected'));
     // }
 
+    print(widget.key);
+
     return Container(
-      key: ValueKey(widget.file.name),
+      key: widget.key,
       decoration: const BoxDecoration(
         color: Colors.white,
         shape: BoxShape.rectangle,
@@ -83,14 +85,14 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.file.name,
+                          widget.controller.file.name,
                           style: const TextStyle(
                             fontSize: 14,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${(widget.file.size / 1024).ceilToDouble()}kb | ${_uploadController.uploadSpeed}kb/s,',
+                          '${(controller.file.size / 1024).ceilToDouble()}kb | ${controller.uploadSpeed}kb/s,',
                           style: const TextStyle(fontSize: 12),
                         ),
                       ],
@@ -103,7 +105,7 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                   children: [
                     TextButton(
                       onPressed: () {
-                        _uploadController.start();
+                        controller.start();
                       },
                       child: const Text('Start'),
                     ),
@@ -111,13 +113,13 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                     // Same state
                     TextButton(
                       onPressed: () {
-                        _uploadController.pause();
+                        controller.pause();
                       },
                       child: const Text('Pause'),
                     ),
                     TextButton(
                       onPressed: () {
-                        _uploadController.resume();
+                        controller.resume();
                       },
                       child: const Text('Resume'),
                     ),
@@ -125,20 +127,20 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                     // Same State
                     TextButton(
                       onPressed: () {
-                        _uploadController.restart();
+                        controller.restart();
                       },
                       child: const Text('Restart'),
                     ),
                     // Must have a popup to confirm
                     TextButton(
                       onPressed: () {
-                        _uploadController.abort();
+                        controller.abort();
                       },
                       child: const Text('Cancel'),
                     ),
                     TextButton(
                       onPressed: () {
-                        _uploadController.abort();
+                        controller.abort();
                       },
                       child: const Text('Remove'),
                     ),
@@ -147,29 +149,48 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
               ],
             ),
           ),
-          ColoredBox(
-            color: _uploadController.status == UploadStatus.canceled
-                ? Colors.red
-                : Colors.grey[200]!,
-            child: Stack(
-              children: [
-                LinearProgressIndicator(
-                  value: _uploadController.streamProgress,
-                  color: Colors.yellow[300],
-                  backgroundColor: Colors.transparent,
-                  minHeight: 5,
-                ),
-                // Second indicator says the progress of the upload
-                LinearProgressIndicator(
-                  value: _uploadController.uploadProgress,
-                  color: _uploadController.uploadProgress == 1
-                      ? Colors.green
-                      : Colors.blue,
-                  backgroundColor: Colors.transparent,
-                  minHeight: 5,
-                ),
-              ],
-            ),
+          ProgressIndicator(
+            key: ValueKey(controller.file.name),
+            status: controller.status,
+            streamProgress: controller.streamProgress,
+            uploadProgress: controller.uploadProgress,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ProgressIndicator extends StatelessWidget {
+  final UploadStatus status;
+  final double streamProgress, uploadProgress;
+
+  const ProgressIndicator({
+    super.key,
+    required this.status,
+    required this.streamProgress,
+    required this.uploadProgress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      key: key,
+      color: status == UploadStatus.canceled ? Colors.red : Colors.grey[200]!,
+      child: Stack(
+        children: [
+          LinearProgressIndicator(
+            value: streamProgress,
+            color: Colors.yellow[300],
+            backgroundColor: Colors.transparent,
+            minHeight: 5,
+          ),
+          // Second indicator says the progress of the upload
+          LinearProgressIndicator(
+            value: uploadProgress,
+            color: uploadProgress == 1 ? Colors.green : Colors.blue,
+            backgroundColor: Colors.transparent,
+            minHeight: 5,
           ),
         ],
       ),
@@ -185,7 +206,7 @@ class DemoPage extends StatefulWidget {
 }
 
 class DemoPageState extends State<DemoPage> {
-  final ValueNotifier<List<FileUploadWidget>> _files = ValueNotifier([]);
+  final List<UploadController> _uploadControllers = [];
 
   @override
   void initState() {
@@ -209,11 +230,17 @@ class DemoPageState extends State<DemoPage> {
       return;
     }
 
-    final files = result.files.map((file) {
-      return FileUploadWidget(key: ValueKey(file.name), file: file);
-    }).toList();
-
-    _files.value = List.from(_files.value)..addAll(files);
+    final files = result.files;
+    _uploadControllers.add(UploadController(file: files.first));
+    setState(() {});
+    // for (var file in files) {
+    //   _controllers.add(
+    //     UploadController(file: file),
+    //   );
+    // }
+    // if (mounted) {
+    //   setState(() {});
+    // }
   }
 
   @override
@@ -226,22 +253,8 @@ class DemoPageState extends State<DemoPage> {
         children: [
           const Text('Upload list'),
           Expanded(
-            child: ValueListenableBuilder(
-              valueListenable: _files,
-              builder: (context, value, child) {
-                print('update');
-                if (value.isEmpty) {
-                  return const Center(child: Text('No file selected'));
-                }
-                return ListView.builder(
-                  key: const ValueKey('file-list'),
-                  itemCount: value.length,
-                  padding: const EdgeInsets.all(25),
-                  itemBuilder: (context, index) {
-                    return value[index];
-                  },
-                );
-              },
+            child: UploadList(
+              controllers: _uploadControllers,
             ),
           ),
         ],
@@ -250,6 +263,42 @@ class DemoPageState extends State<DemoPage> {
         onPressed: _pickFile,
         tooltip: 'Pick File',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class UploadList extends StatefulWidget {
+  final List<UploadController> controllers;
+  const UploadList({super.key, required this.controllers});
+
+  @override
+  State<UploadList> createState() => _UploadListState();
+}
+
+class _UploadListState extends State<UploadList> {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.custom(
+      key: const ValueKey('upload-list'),
+      childrenDelegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final controller = widget.controllers[index];
+          return FileUploadWidget(
+            key: ValueKey(controller.file.name),
+            controller: controller,
+          );
+        },
+        childCount: widget.controllers.length,
+        findChildIndexCallback: (key) {
+          if (key is ValueKey) {
+            final value = key.value;
+            if (value is UploadController) {
+              return widget.controllers.indexOf(value);
+            }
+          }
+          return null;
+        },
       ),
     );
   }
