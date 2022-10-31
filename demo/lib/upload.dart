@@ -18,6 +18,8 @@ enum UploadStatus {
   failed,
 }
 
+const _maxAttempt = 3;
+
 class UploadController extends ChangeNotifier {
   final String endpoint;
   final String category;
@@ -114,8 +116,9 @@ class UploadController extends ChangeNotifier {
     );
   }
 
-  void _cancelRequest() {
+  void _cancelActiveRequest() {
     if (_currentCancelToken == null) {
+      print('No active request to cancel.');
       // throw Exception('Request not in progress');
     }
 
@@ -144,11 +147,15 @@ class UploadController extends ChangeNotifier {
   void pause() async {
     // if (_status != UploadStatus.active) return;
 
-    if (_streamSubscription?.isPaused == false) {
+    if (!_streamSubscription!.isPaused) {
       _streamSubscription?.pause();
     }
 
-    _setStatus(UploadStatus.paused);
+    if (status != UploadStatus.paused) {
+      _setStatus(UploadStatus.paused);
+      // TODO: determine if we should cancel the request or continue it for data consumption.
+      _cancelActiveRequest();
+    }
   }
 
   // Check if it's manually paused or not.
@@ -196,16 +203,21 @@ class UploadController extends ChangeNotifier {
 
   void restart() {
     if (_streamSubscription == null) {
+      print('Stream is null');
+      return;
       // throw Exception('Stream subscription is null');
     }
 
     if (_savedChunk == null) {
+      print('No saved chunk');
+      return;
       // Invalidate the upload.
       // throw Exception('There is no chunk to retrieve, aborting');
     }
 
     // Notify client we can restart.
     // _isPendingRestart.value = false;
+    _setStatus(UploadStatus.active);
 
     _manageChunk(_savedChunk!).then(manageStream).catchError((error) {
       _print(error);
@@ -267,71 +279,56 @@ class UploadController extends ChangeNotifier {
     _computeStreamProgress(next);
 
     try {
-      await _sendChunk(
+      final response = await _sendChunk(
         chunk: chunk,
         rangeStart: _rangeStart,
         rangeEnd: _rangeStart + chunk.length - 1,
       );
-      if (status == UploadStatus.canceled) {
-        return false;
+
+      if (response.statusCode != 200) {
+        if (status == UploadStatus.failed) {
+          return false;
+        }
+
+        if (attempt < _maxAttempt) {
+          _print('Failed to send chunk, retrying...');
+
+          return Future.delayed(
+            const Duration(seconds: 1),
+            () => _manageChunk(chunk, attempt),
+          );
+        } else if (status != UploadStatus.active) {
+          return false;
+        }
       }
 
       _rangeStart += chunk.length;
       return true;
-    } catch (e) {
-      // _print(e);
-      if (attempt < 3) {
-        _print('${attempt++}');
-        return _manageChunk(chunk, attempt++);
+    } on DioError catch (e) {
+      switch (e.type) {
+        case DioErrorType.cancel:
+          if (status == UploadStatus.paused) {
+            if (status != UploadStatus.failed) {
+              _savedChunk = chunk;
+            }
+            return false;
+          }
+          break;
+        case DioErrorType.connectTimeout:
+          _print('Connection timeout');
+          break;
+        case DioErrorType.other:
+          _print('Other error');
+          break;
+        default:
       }
 
-      _savedChunk = chunk;
-      return false;
-    }
-  }
+      e.type == DioErrorType.cancel
+          ? _setStatus(UploadStatus.canceled)
+          : abort(failed: true);
 
-  Future<bool> _sendChunkResoved({
-    required Uint8List chunk,
-    required int rangeStart,
-    required int rangeEnd,
-  }) async {
-    if (_uploadID.isEmpty) {
-      _setStatus(UploadStatus.failed);
-    }
+      _print('ManageChunk Exception $e');
 
-    final putHeaders = {
-      'upload-id': _uploadID,
-      Headers.contentLengthHeader: chunk.length,
-      'content-type': 'application/octet-stream',
-      'content-range': 'bytes $rangeStart-$rangeEnd/$_fileSize',
-      ...headers,
-    };
-
-    // We need a cancel token for each request.
-    _setCancelToken();
-
-    try {
-      final response = await Dio().putUri(
-        Uri.parse(endpoint),
-        options: Options(
-          headers: putHeaders,
-          followRedirects: false,
-          validateStatus: _validateStatus,
-        ),
-        data: Stream.value(chunk),
-        onReceiveProgress: _onReceiveProgress,
-        onSendProgress: _computeUploadProgress,
-        cancelToken: _currentCancelToken,
-      );
-
-      print(response);
-
-      return true;
-    } on DioError catch (e) {
-      _print(e);
-      return false;
-    } catch (e) {
-      _print(e);
       return false;
     }
   }
@@ -353,7 +350,7 @@ class UploadController extends ChangeNotifier {
       ...headers,
     };
 
-    // We need a cancel token for each request.
+    // We need a cancel token for each new request.
     _setCancelToken();
 
     // Debug
@@ -374,18 +371,15 @@ class UploadController extends ChangeNotifier {
   }
 
   void _setCancelToken() {
-    try {
-      _currentCancelToken = CancelToken();
-    } catch (e) {
-      _print(e);
-      // throw Exception('Cancel Token not assignable, aborting');
-    }
+    _currentCancelToken = CancelToken();
   }
 
   bool _validateStatus(int? status) {
     if (status == null) {
       return false;
     }
+
+    print('request status: $status');
 
     return status == 200;
   }

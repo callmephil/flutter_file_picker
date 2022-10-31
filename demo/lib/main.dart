@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:demo/stream_subscription_controller.dart';
 import 'package:demo/upload.dart';
 import 'package:flutter/material.dart';
@@ -36,12 +34,18 @@ class FileUploadWidget extends StatefulWidget {
 }
 
 class _FileUploadWidgetState extends State<FileUploadWidget> {
+  ValueNotifier<double> uploadProgress = ValueNotifier(0);
+  ValueNotifier<double> streamProgress = ValueNotifier(0);
+  ValueNotifier<UploadStatus> status = ValueNotifier(UploadStatus.notStarted);
+
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(() {
       if (mounted) {
-        setState(() {});
+        uploadProgress.value = widget.controller.uploadProgress;
+        streamProgress.value = widget.controller.streamProgress;
+        status.value = widget.controller.status;
       }
     });
   }
@@ -59,8 +63,6 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
     // if (_uploadController == null) {
     //   return const Center(child: Text('No file selected'));
     // }
-
-    print(widget.key);
 
     return Container(
       key: widget.key,
@@ -101,59 +103,18 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
                 ),
 
                 // should be a status notifier, based on that we render 3 different states
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        controller.start();
-                      },
-                      child: const Text('Start'),
-                    ),
-                    // -----------
-                    // Same state
-                    TextButton(
-                      onPressed: () {
-                        controller.pause();
-                      },
-                      child: const Text('Pause'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        controller.resume();
-                      },
-                      child: const Text('Resume'),
-                    ),
-                    // -----------
-                    // Same State
-                    TextButton(
-                      onPressed: () {
-                        controller.restart();
-                      },
-                      child: const Text('Restart'),
-                    ),
-                    // Must have a popup to confirm
-                    TextButton(
-                      onPressed: () {
-                        controller.abort();
-                      },
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        controller.abort();
-                      },
-                      child: const Text('Remove'),
-                    ),
-                  ],
+                UploadWebControls(
+                  controller: controller,
+                  status: status,
                 ),
               ],
             ),
           ),
           ProgressIndicator(
             key: ValueKey(controller.file.name),
-            status: controller.status,
-            streamProgress: controller.streamProgress,
-            uploadProgress: controller.uploadProgress,
+            status: status,
+            streamProgress: streamProgress,
+            uploadProgress: uploadProgress,
           ),
         ],
       ),
@@ -161,9 +122,93 @@ class _FileUploadWidgetState extends State<FileUploadWidget> {
   }
 }
 
+class UploadWebControls extends StatelessWidget {
+  final UploadController controller;
+  final ValueNotifier<UploadStatus> status;
+  const UploadWebControls({
+    super.key,
+    required this.status,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: status,
+      builder: (_, value, __) {
+        switch (value) {
+          case UploadStatus.notStarted:
+            return Row(
+              children: [
+                TextButton(
+                  onPressed: () {
+                    controller.start();
+                  },
+                  child: const Text('Start'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // controller.abort();
+                  },
+                  child: const Text('Remove'),
+                ),
+              ],
+            );
+          case UploadStatus.active:
+            return Row(
+              children: [
+                TextButton(
+                  onPressed: () {
+                    controller.pause();
+                  },
+                  child: const Text('Pause'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    controller.abort();
+                  },
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          case UploadStatus.paused:
+            return Row(
+              children: [
+                TextButton(
+                  onPressed: () {
+                    controller.restart();
+                  },
+                  child: const Text('Resume'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    controller.abort();
+                  },
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          case UploadStatus.completed:
+            return const Text('Upload Completed');
+          case UploadStatus.canceled:
+            return const Text('Upload Canceled');
+          case UploadStatus.failed:
+            return const Text('Upload Failed, Retrying...');
+          default:
+            return const SizedBox();
+        }
+      },
+    );
+  }
+}
+
+// when all the chunks have been sent and the upload progress is at 1 show green
+// when the chunks are being sent show and the upload progress is < 1 show yellow
+// when upload progress is < 1 override the yellow with blue.
+// when the upload is canceled show red
 class ProgressIndicator extends StatelessWidget {
-  final UploadStatus status;
-  final double streamProgress, uploadProgress;
+  final ValueNotifier<UploadStatus> status;
+  final ValueNotifier<double> streamProgress, uploadProgress;
 
   const ProgressIndicator({
     super.key,
@@ -174,24 +219,41 @@ class ProgressIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      key: key,
-      color: status == UploadStatus.canceled ? Colors.red : Colors.grey[200]!,
+    return ValueListenableBuilder(
+      valueListenable: status,
+      builder: (_, value, child) {
+        return ColoredBox(
+          key: key,
+          color: value == UploadStatus.failed ? Colors.red : Colors.grey[200]!,
+          child: child,
+        );
+      },
       child: Stack(
         children: [
-          LinearProgressIndicator(
-            value: streamProgress,
-            color: Colors.yellow[300],
-            backgroundColor: Colors.transparent,
-            minHeight: 5,
+          ValueListenableBuilder(
+            valueListenable: streamProgress,
+            builder: (_, value, __) {
+              return LinearProgressIndicator(
+                value: value,
+                color: Colors.yellow[300],
+                backgroundColor: Colors.transparent,
+                minHeight: 5,
+              );
+            },
           ),
+          ValueListenableBuilder(
+            valueListenable: uploadProgress,
+            builder: (_, value, __) {
+              return LinearProgressIndicator(
+                value: value,
+                color: value == 1 ? Colors.green : Colors.blue,
+                backgroundColor: Colors.transparent,
+                minHeight: 5,
+              );
+            },
+          ),
+
           // Second indicator says the progress of the upload
-          LinearProgressIndicator(
-            value: uploadProgress,
-            color: uploadProgress == 1 ? Colors.green : Colors.blue,
-            backgroundColor: Colors.transparent,
-            minHeight: 5,
-          ),
         ],
       ),
     );
@@ -230,8 +292,16 @@ class DemoPageState extends State<DemoPage> {
       return;
     }
 
-    final files = result.files;
-    _uploadControllers.add(UploadController(file: files.first));
+    _uploadControllers.addAll(
+      List.from(
+        result.files.map(
+          (file) {
+            return UploadController(file: file);
+          },
+        ),
+      ),
+    );
+
     setState(() {});
     // for (var file in files) {
     //   _controllers.add(
@@ -281,6 +351,7 @@ class _UploadListState extends State<UploadList> {
   Widget build(BuildContext context) {
     return ListView.custom(
       key: const ValueKey('upload-list'),
+      padding: const EdgeInsets.all(8),
       childrenDelegate: SliverChildBuilderDelegate(
         (context, index) {
           final controller = widget.controllers[index];
