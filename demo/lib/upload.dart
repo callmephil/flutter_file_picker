@@ -64,6 +64,11 @@ class UploadController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // We recieve the signal that the stream is ready to continue.
+  void _onReceiveProgress(int count, int total) {
+    _print('onReceiveProgress: $count/$total');
+  }
+
   /* Upload time stamp */
   static final List<int> _uploadTimeStamps = [];
   void _setUploadTimeStamp() {
@@ -90,9 +95,9 @@ class UploadController extends ChangeNotifier {
 
   static double _streamProgress = 0;
   double get streamProgress => _streamProgress;
-  void _computeStreamProgress(int sent) {
+  void _computeStreamProgress(int read) {
     _print('stream progress: $_rangeStart / $_fileSize');
-    _streamProgress = sent / _fileSize;
+    _streamProgress = read / _fileSize;
     notifyListeners();
   }
   // Compute time it takes to upload a chunk and return a time estimation for completion.
@@ -314,21 +319,28 @@ class UploadController extends ChangeNotifier {
             return false;
           }
           break;
+        case DioErrorType.sendTimeout:
+          _print('SendTime, retrying...');
+          break;
+
+        case DioErrorType.receiveTimeout:
+          _print('Timeout, retrying...');
+          break;
+
         case DioErrorType.connectTimeout:
           _print('Connection timeout');
           break;
         case DioErrorType.other:
           _print('Other error');
           break;
-        default:
+        // default:
+        case DioErrorType.response:
+          _print('response error');
+          // TODO: Handle this case.
+          break;
       }
-
-      e.type == DioErrorType.cancel
-          ? _setStatus(UploadStatus.canceled)
-          : abort(failed: true);
-
-      _print('ManageChunk Exception $e');
-
+      print('ManageChunk Exception $e');
+      abort(failed: true);
       return false;
     }
   }
@@ -382,10 +394,5 @@ class UploadController extends ChangeNotifier {
     print('request status: $status');
 
     return status == 200;
-  }
-
-  // We recieve the signal that the stream is ready to continue.
-  void _onReceiveProgress(int count, int total) {
-    _print('onReceiveProgress: $count/$total');
   }
 }
